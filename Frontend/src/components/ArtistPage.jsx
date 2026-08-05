@@ -1,10 +1,10 @@
-import React, { useContext, useEffect, useState } from "react";
+import React, { useContext, useEffect, useState, useCallback } from "react";
 import { useNavigate, useParams, useLocation } from "react-router-dom";
 import { PlayerContext } from "../context/PlayerContext";
 import { MoreVertical } from "lucide-react";
 import AddToPlaylistModal from "@/components/AddToPlaylistModal";
 import { API_URL } from "../config.js";
-import { FastAverageColor } from "fast-average-color"; // Added import
+import { FastAverageColor } from "fast-average-color";
 
 const formatTime = (sec) => {
   if (!sec) return "0:00";
@@ -25,10 +25,9 @@ const ArtistPage = () => {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [selectedSong, setSelectedSong] = useState(null);
   
-  // State to hold our dynamically extracted colors
   const [themeDetails, setThemeDetails] = useState({
-    themeFrom: "#121212", // Default dark fallback
-    themeAccent: "#1db954", // Default Spotify green fallback
+    themeFrom: "#121212", 
+    themeAccent: "#1db954", 
     genre: "Top Hits & Trending Melodies."
   });
 
@@ -82,7 +81,6 @@ const ArtistPage = () => {
         if (res.ok) {
           const data = await res.json();
           setDbArtistData(data);
-          // If your DB has a genre column later, you can update it here
           if (data.genre) {
             setThemeDetails(prev => ({ ...prev, genre: data.genre }));
           }
@@ -107,30 +105,34 @@ const ArtistPage = () => {
         setThemeDetails(prev => ({
           ...prev,
           themeFrom: color.hex,
-          themeAccent: color.isLight ? '#121212' : color.hex // Ensures accent text remains visible
+          themeAccent: color.isLight ? '#121212' : color.hex 
         }));
       })
       .catch(e => {
         console.error("Color extraction failed. Using fallback colors.", e);
       });
       
-    // Cleanup function
     return () => fac.destroy();
   }, [finalImage]);
 
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  const handlePlayPause = () => {
+  const handlePlayPause = useCallback(() => {
     if (!displaySongs.length) return;
-    if (!playlist.length || playlist[0].name !== displaySongs[0]?.name) {
-      playPlaylist(displaySongs, 0);
-    } else { playPause(); }
-    setMiniPlayerVisible(true);
-  };
+    
+    const isCurrentArtistPlaying = playlist && playlist.length > 0 && playlist.some(song => song.artist === decodedArtistName);
 
-  const selectSong = (index) => {
+    if (!isCurrentArtistPlaying) {
+      playPlaylist(displaySongs, 0);
+    } else {
+      playPause();
+    }
+    
+    if (setMiniPlayerVisible) setMiniPlayerVisible(true);
+  }, [displaySongs, playlist, decodedArtistName, playPlaylist, playPause, setMiniPlayerVisible]);
+
+  const selectSong = useCallback((index) => {
     playPlaylist(displaySongs, index, true);
-    setMiniPlayerVisible(true);
-  };
+    if (setMiniPlayerVisible) setMiniPlayerVisible(true);
+  }, [displaySongs, playPlaylist, setMiniPlayerVisible]);
 
   const goBack = () => { navigate("/"); };
 
@@ -144,7 +146,7 @@ const ArtistPage = () => {
     };
     window.addEventListener("keydown", handleKeyDown, true);
     return () => window.removeEventListener("keydown", handleKeyDown, true);
-  }, [playlist, handlePlayPause]);
+  }, [handlePlayPause]);
 
   return (
     <div 
@@ -156,7 +158,6 @@ const ArtistPage = () => {
     >
       <style>{`
         .artist-header { background-image: linear-gradient(to bottom, var(--theme-from), #121212); }
-        .artist-accent-bg { background-color: var(--theme-accent); color: white; }
         .artist-accent-text { color: var(--theme-accent); }
         .clear-bg-on-hover:hover { background-color: rgba(255, 255, 255, 0.1); }
         .clear-bg-active { background-color: rgba(255, 255, 255, 0.2); }
@@ -173,16 +174,16 @@ const ArtistPage = () => {
           <img
             src={finalImage}
             alt={decodedArtistName}
-            crossOrigin="anonymous" // CRITICAL: Required for color extraction from external URLs
+            crossOrigin="anonymous"
             className="w-56 h-56 shadow-[0_20px_50px_rgba(0,0,0,0.5)] object-cover rounded-full mr-6 border-4 border-white/10 pointer-events-none"
           />
           <div>
             <p className="text-sm font-bold uppercase text-white/80 flex items-center gap-1">
-              <span className="artist-accent-bg px-2 py-0.5 rounded text-[10px]">VERIFIED</span> Artist
+              <span className="bg-[#1db954] text-black px-2 py-0.5 rounded text-[10px] font-extrabold">VERIFIED</span> Artist
             </p>
             <h1 className="text-7xl font-black mb-1 drop-shadow-lg capitalize">{decodedArtistName}</h1>
             <p className="text-lg font-medium text-white/90 mt-2 italic">
-               "{finalQuote}"
+                "{finalQuote}"
             </p>
             <p className="text-sm font-normal text-white/60 mt-1">
               {displaySongs.length} {displaySongs.length === 1 ? 'song' : 'songs'} • {themeDetails.genre}
@@ -195,14 +196,14 @@ const ArtistPage = () => {
         <div className="max-w-5xl mx-auto relative z-20">
           
           <div className="flex items-center mb-6">
-            <button onClick={handlePlayPause} className="w-16 h-16 rounded-full artist-accent-bg flex items-center justify-center shadow-lg hover:scale-105 transition-all duration-300 cursor-pointer">
-              {isPlaying && playlist.length && playlist[0].name === displaySongs[0]?.name ? (
-                <svg className="w-8 h-8" fill="currentColor" viewBox="0 0 24 24"><path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z" /></svg>
+            <button onClick={handlePlayPause} className="w-16 h-16 rounded-full bg-[#1db954] hover:bg-[#1ed760] text-black flex items-center justify-center shadow-lg hover:scale-105 transition-all duration-300 cursor-pointer">
+              {isPlaying && playlist.length > 0 && playlist.some(song => song.artist === decodedArtistName) ? (
+                <svg className="w-8 h-8 fill-current" viewBox="0 0 24 24"><path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z" /></svg>
               ) : (
-                <svg className="w-8 h-8 pl-0.5" fill="currentColor" viewBox="0 0 24 24"><path d="M8 5v14l11-7z" /></svg>
+                <svg className="w-8 h-8 fill-current pl-0.5" viewBox="0 0 24 24"><path d="M8 5v14l11-7z" /></svg>
               )}
             </button>
-            <button onClick={toggleShuffle} className={`ml-4 font-semibold hover:text-white transition cursor-pointer tracking-widest ${isShuffle ? "artist-accent-text" : "text-gray-400"}`}>
+            <button onClick={toggleShuffle} className={`ml-4 font-semibold hover:text-white transition cursor-pointer tracking-widest ${isShuffle ? "text-[#1db954]" : "text-gray-400"}`}>
               SHUFFLE
             </button>
           </div>
@@ -211,45 +212,49 @@ const ArtistPage = () => {
             <div>#</div><div></div><div>Title</div><div className="text-right">Time</div>
           </div>
 
-          {displaySongs.map((song, idx) => (
-            <div key={idx} onClick={() => selectSong(idx)} className={`group grid grid-cols-[16px_48px_1fr_90px] items-center gap-4 px-2 py-2 rounded-md cursor-default transition duration-200 clear-bg-on-hover ${playlist.length && playlist[currentSongIndex]?.name === song.name ? "clear-bg-active text-white" : "text-gray-400"}`}>
-              <div className="font-medium text-sm text-center">
-                {playlist.length && playlist[currentSongIndex]?.name === song.name && isPlaying ? (
-                  <span className="artist-accent-text animate-pulse"><svg className="w-4 h-4 mx-auto" fill="currentColor" viewBox="0 0 24 24"><path d="M7 19v-14h3v14h-3zm8 0V5h3v14h-3z" /></svg></span>
-                ) : (
-                  <span className="group-hover:hidden">{idx + 1}</span>
-                )}
-                <svg className="w-4 h-4 hidden group-hover:block text-white" fill="currentColor" viewBox="0 0 24 24"><path d="M8 5v14l11-7z" /></svg>
-              </div>
-              
-              <img src={song.image} alt={song.name} className="w-12 h-12 object-cover rounded shadow-md pointer-events-none" />
-              
-              <div className="flex flex-col truncate">
-                <span className={`text-base font-semibold truncate ${playlist.length && playlist[currentSongIndex]?.name === song.name ? 'artist-accent-text' : 'text-white'}`}>{song.name}</span>
-                <span className="text-sm font-light text-gray-400 group-hover:text-gray-300">{song.artist}</span>
-              </div>
-              
-              <div className="flex justify-end items-center gap-3 text-sm text-gray-400">
-                <span>
-                  {playlist.length && playlist[currentSongIndex]?.name === song.name && isPlaying
-                    ? formatTime(duration)
-                    : song.duration
-                  }
-                </span>
+          {displaySongs.map((song, idx) => {
+            const isCurrentSong = playlist.length > 0 && playlist[currentSongIndex]?.name === song.name;
 
-                <button 
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    setSelectedSong(song);
-                    setIsModalOpen(true);
-                  }}
-                  className="hidden group-hover:block cursor-pointer hover:text-white"
-                >
-                  <MoreVertical className="w-5 h-5" />
-                </button>
+            return (
+              <div key={idx} onClick={() => selectSong(idx)} className={`group grid grid-cols-[16px_48px_1fr_90px] items-center gap-4 px-2 py-2 rounded-md cursor-default transition duration-200 clear-bg-on-hover ${isCurrentSong ? "clear-bg-active text-white" : "text-gray-400"}`}>
+                <div className="font-medium text-sm text-center">
+                  {isCurrentSong && isPlaying ? (
+                    <span className="text-[#1db954] animate-pulse"><svg className="w-4 h-4 mx-auto" fill="currentColor" viewBox="0 0 24 24"><path d="M7 19v-14h3v14h-3zm8 0V5h3v14h-3z" /></svg></span>
+                  ) : (
+                    <span className="group-hover:hidden">{idx + 1}</span>
+                  )}
+                  <svg className="w-4 h-4 hidden group-hover:block text-white" fill="currentColor" viewBox="0 0 24 24"><path d="M8 5v14l11-7z" /></svg>
+                </div>
+                
+                <img src={song.image} alt={song.name} className="w-12 h-12 object-cover rounded shadow-md pointer-events-none" />
+                
+                <div className="flex flex-col truncate">
+                  <span className={`text-base font-semibold truncate ${isCurrentSong ? 'text-[#1db954]' : 'text-white'}`}>{song.name}</span>
+                  <span className="text-sm font-light text-gray-400 group-hover:text-gray-300">{song.artist}</span>
+                </div>
+                
+                <div className="flex justify-end items-center gap-3 text-sm text-gray-400">
+                  <span>
+                    {isCurrentSong
+                      ? formatTime(duration)
+                      : song.duration
+                    }
+                  </span>
+
+                  <button 
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setSelectedSong(song);
+                      setIsModalOpen(true);
+                    }}
+                    className="hidden group-hover:block cursor-pointer hover:text-white"
+                  >
+                    <MoreVertical className="w-5 h-5" />
+                  </button>
+                </div>
               </div>
-            </div>
-          ))}
+            );
+          })}
           
           {displaySongs.length === 0 && (
              <div className="text-center py-10"><p className="text-gray-400">No tracks found for this artist.</p></div>
