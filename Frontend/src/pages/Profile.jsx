@@ -1,8 +1,9 @@
-import React, { useState, useEffect, useContext } from 'react';
+import React, { useState, useEffect, useContext, useCallback } from 'react';
 import { useUser, useClerk, UserProfile } from "@clerk/clerk-react";
 import { useNavigate } from "react-router-dom";
 import { LogOut, ShieldAlert, Clock, Settings, Play, Music, Power } from "lucide-react";
 import { PlayerContext } from "../context/PlayerContext";
+import { API_URL } from "../config.js";
 
 const Profile = () => {
   const { user, isLoaded } = useUser();
@@ -12,13 +13,10 @@ const Profile = () => {
 
   const [activeTab, setActiveTab] = useState("history");
   const [recentSongs, setRecentSongs] = useState([]);
-  const [isLoadingData, setIsLoadingData] = useState(true);
   
-  // 🟢 NEW: State for the maintenance switch
   const [maintenanceMode, setMaintenanceMode] = useState(false);
   const [isSwitching, setIsSwitching] = useState(false);
 
-  // 🟢 UPDATED: Using the .env variable to match your App.jsx security!
   const email = user?.primaryEmailAddress?.emailAddress;
   const isAdmin = email === import.meta.env.VITE_ADMIN_EMAIL;
 
@@ -26,39 +24,36 @@ const Profile = () => {
     if (!email) return;
 
     const fetchUserData = async () => {
-      setIsLoadingData(true);
       const history = JSON.parse(localStorage.getItem('vibecast_history')) || [];
       setRecentSongs(history);
-      setIsLoadingData(false);
     };
 
     fetchUserData();
   }, [email]);
 
-  // 🟢 NEW: Fetch maintenance status ONLY if this user is the Admin
+  const fetchMaintenanceStatus = useCallback(async () => {
+    try {
+      const res = await fetch(`${API_URL}/api/settings`);
+      if (res.ok) {
+        const data = await res.json();
+        setMaintenanceMode(data.maintenance_mode);
+      }
+    } catch {
+      console.error("Failed to load settings");
+    }
+  }, []);
+
   useEffect(() => {
     if (isAdmin) {
-      const fetchMaintenanceStatus = async () => {
-        try {
-          const res = await fetch('http://localhost:5000/api/settings');
-          if (res.ok) {
-            const data = await res.json();
-            setMaintenanceMode(data.maintenance_mode);
-          }
-        } catch (err) {
-          console.error("Failed to load settings", err);
-        }
-      };
       fetchMaintenanceStatus();
     }
-  }, [isAdmin]);
+  }, [isAdmin, fetchMaintenanceStatus]);
 
-  // 🟢 NEW: Function to toggle the server setting
   const toggleMaintenance = async () => {
     setIsSwitching(true);
     const newState = !maintenanceMode;
     try {
-      const res = await fetch('http://localhost:5000/api/settings/maintenance', {
+      const res = await fetch(`${API_URL}/api/settings/maintenance`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ isEnabled: newState })
@@ -66,7 +61,7 @@ const Profile = () => {
       if (res.ok) {
         setMaintenanceMode(newState);
       }
-    } catch (err) {
+    } catch {
       console.error("Failed to update maintenance setting");
     } finally {
       setIsSwitching(false);
@@ -125,7 +120,6 @@ const Profile = () => {
           </div>
         </div>
 
-        {/* 🟢 UPDATED: Admin Panel with both buttons */}
         {isAdmin && (
           <div className="rounded-2xl border border-[#1db954]/30 bg-[#1db954]/10 p-6 flex flex-col md:flex-row items-center justify-between gap-6 backdrop-blur-sm">
             <div>

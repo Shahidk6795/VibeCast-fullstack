@@ -3,13 +3,8 @@ import { useNavigate, useParams, useLocation } from "react-router-dom";
 import { PlayerContext } from "../context/PlayerContext";
 import { MoreVertical } from "lucide-react";
 import AddToPlaylistModal from "@/components/AddToPlaylistModal";
-
-const artistDetails = {
-  "Arijit Singh": { themeFrom: "#4338ca", themeAccent: "#6366f1", genre: "Soulful, Romantic & Melody." },
-  "Anuv Jain": { themeFrom: "#92400e", themeAccent: "#d97706", genre: "Indie Pop, Acoustic & Storytelling." },
-  "Drake": { themeFrom: "#1e3a8a", themeAccent: "#3b82f6", genre: "Hip-Hop, R&B & Rap." },
-  "default": { themeFrom: "#374151", themeAccent: "#1db954", genre: "Top Hits & Trending Melodies." }
-};
+import { API_URL } from "../config.js";
+import { FastAverageColor } from "fast-average-color"; // Added import
 
 const formatTime = (sec) => {
   if (!sec) return "0:00";
@@ -29,8 +24,13 @@ const ArtistPage = () => {
   
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [selectedSong, setSelectedSong] = useState(null);
-
-  const themeDetails = artistDetails[decodedArtistName] || artistDetails["default"];
+  
+  // State to hold our dynamically extracted colors
+  const [themeDetails, setThemeDetails] = useState({
+    themeFrom: "#121212", // Default dark fallback
+    themeAccent: "#1db954", // Default Spotify green fallback
+    genre: "Top Hits & Trending Melodies."
+  });
 
   const {
     playPlaylist, playPause, isPlaying, currentSongIndex,
@@ -42,9 +42,9 @@ const ArtistPage = () => {
   }, []);
 
   useEffect(() => {
-const fetchDynamicTracks = async () => {
+    const fetchDynamicTracks = async () => {
       try {
-        const res = await fetch(`http://localhost:5000/api/tracks/artist/${encodeURIComponent(decodedArtistName)}`);
+        const res = await fetch(`${API_URL}/api/tracks/artist/${encodeURIComponent(decodedArtistName)}`);
         if (res.ok) {
           const tracks = await res.json();
           if (Array.isArray(tracks)) {
@@ -78,10 +78,14 @@ const fetchDynamicTracks = async () => {
 
     const fetchArtistDetails = async () => {
       try {
-        const res = await fetch(`http://localhost:5000/api/artists/name/${encodeURIComponent(decodedArtistName)}`);
+        const res = await fetch(`${API_URL}/api/artists/name/${encodeURIComponent(decodedArtistName)}`);
         if (res.ok) {
           const data = await res.json();
           setDbArtistData(data);
+          // If your DB has a genre column later, you can update it here
+          if (data.genre) {
+            setThemeDetails(prev => ({ ...prev, genre: data.genre }));
+          }
         }
       } catch (error) { console.error("Failed to fetch artist details:", error); }
     };
@@ -92,6 +96,29 @@ const fetchDynamicTracks = async () => {
 
   const finalQuote = dbArtistData?.quote || "Discover the top hits and latest drops. 🎵";
   const finalImage = location.state?.image || dbArtistData?.image_url || "https://ik.imagekit.io/VibeCast/images/default-artist.jpg";
+
+  // New useEffect specifically for color extraction
+  useEffect(() => {
+    if (!finalImage) return;
+
+    const fac = new FastAverageColor();
+    
+    fac.getColorAsync(finalImage, { algorithm: 'dominant' })
+      .then(color => {
+        // color.hex gives us the dominant color from the image
+        setThemeDetails(prev => ({
+          ...prev,
+          themeFrom: color.hex,
+          themeAccent: color.isLight ? '#121212' : color.hex // Ensures accent text remains visible
+        }));
+      })
+      .catch(e => {
+        console.error("Color extraction failed. Using fallback colors.", e);
+      });
+      
+    // Cleanup function
+    return () => fac.destroy();
+  }, [finalImage]);
 
   // eslint-disable-next-line react-hooks/exhaustive-deps
   const handlePlayPause = () => {
@@ -123,7 +150,7 @@ const fetchDynamicTracks = async () => {
 
   return (
     <div 
-      className="min-h-screen text-white flex flex-col items-center overflow-hidden bg-black select-none cursor-default"
+      className="min-h-screen text-white flex flex-col items-center overflow-hidden bg-black select-none cursor-default transition-colors duration-700"
       style={{
         "--theme-from": themeDetails.themeFrom,
         "--theme-accent": themeDetails.themeAccent
@@ -138,7 +165,7 @@ const fetchDynamicTracks = async () => {
         .clear-bg-strip { background-color: rgba(18, 18, 18, 0.1); }
       `}</style>
 
-      <div className="w-full h-80 pt-16 relative artist-header z-10 shadow-lg">
+      <div className="w-full h-80 pt-16 relative artist-header z-10 shadow-lg transition-all duration-700">
         <button onClick={goBack} className="absolute top-4 left-4 p-2 rounded-full bg-black/50 hover:bg-black/70 z-30 transition-transform hover:scale-110 cursor-pointer">
           <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 19l-7-7 7-7"></path>
@@ -148,6 +175,7 @@ const fetchDynamicTracks = async () => {
           <img
             src={finalImage}
             alt={decodedArtistName}
+            crossOrigin="anonymous" // CRITICAL: Required for color extraction from external URLs
             className="w-56 h-56 shadow-[0_20px_50px_rgba(0,0,0,0.5)] object-cover rounded-full mr-6 border-4 border-white/10 pointer-events-none"
           />
           <div>

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useContext } from 'react';
+import React, { useState, useEffect, useContext, useCallback, useMemo } from 'react';
 import { useNavigate } from "react-router-dom";
 import { PlayerContext } from "../context/PlayerContext";
 import "../index.css";
@@ -6,6 +6,34 @@ import Hyperspeed from "@/components/Hyperspeed";
 import { Play, Dumbbell, Coffee, Heart } from "lucide-react";
 import LikedSongsCard from "@/components/LikedSongsCard";
 import PlaylistManager from "@/components/PlaylistManager";
+import { API_URL } from '../config.js';
+
+const moods = [
+  {
+    id: "workout",
+    title: "Iron Paradise",
+    desc: "Pure Adrenaline.",
+    icon: Dumbbell,
+    color: "from-red-600 to-black",
+    textColor: "text-red-500"
+  },
+  {
+    id: "relax",
+    title: "Zen Mode",
+    desc: "Lo-Fi & Chill.",
+    icon: Coffee,
+    color: "from-emerald-600 to-black",
+    textColor: "text-emerald-400"
+  },
+  {
+    id: "romantic",
+    title: "Late Night",
+    desc: "Slow & Deep.",
+    icon: Heart,
+    color: "from-pink-600 to-black",
+    textColor: "text-pink-500"
+  }
+];
 
 const Home = () => {
   const [dbTracks, setDbTracks] = useState([]);
@@ -14,82 +42,56 @@ const Home = () => {
 
   const { playPlaylist } = useContext(PlayerContext);
 
-  useEffect(() => {
-    const fetchTracks = async () => {
-      try {
-        const response = await fetch('http://localhost:5000/api/tracks');
-        if (response.ok) {
-          const data = await response.json();
-          // 🟢 NEW: Reverse to get newest first, then keep only the top 15!
-          const newestTracks = data.reverse().slice(0, 15);
-          setDbTracks(newestTracks);
-        }
-      } catch (error) {
-        console.error('Error fetching tracks:', error);
+  const fetchTracks = useCallback(async () => {
+    try {
+      const response = await fetch(`${API_URL}/api/tracks`);
+      if (response.ok) {
+        const data = await response.json();
+        const newestTracks = data.reverse().slice(0, 15);
+        setDbTracks(newestTracks);
       }
-    };
-
-    const fetchArtists = async () => {
-      try {
-        const response = await fetch('http://localhost:5000/api/artists');
-        if (response.ok) {
-          const data = await response.json();
-          const formattedArtists = data.map(artist => ({
-            name: artist.name,
-            image: artist.image_url || "https://placehold.co/400x400/181818/ffffff?text=No+Image", 
-            path: `/artist/${encodeURIComponent(artist.name)}`
-          }));
-          setHomeArtists(formattedArtists);
-        }
-      } catch (error) {
-        console.error('Error fetching artists:', error);
-      }
-    };
-
-    fetchTracks();
-    fetchArtists();
+    } catch (error) {
+      console.error('Error fetching tracks:', error);
+    }
   }, []);
 
-  const handleArtistClick = (artist) => {
-    navigate(`/artist/${encodeURIComponent(artist.name)}`, { state: { image: artist.image } }); 
-  };
-
-  const moods = [
-    {
-      id: "workout",
-      title: "Iron Paradise",
-      desc: "Pure Adrenaline.",
-      icon: Dumbbell,
-      color: "from-red-600 to-black",
-      textColor: "text-red-500"
-    },
-    {
-      id: "relax",
-      title: "Zen Mode",
-      desc: "Lo-Fi & Chill.",
-      icon: Coffee,
-      color: "from-emerald-600 to-black",
-      textColor: "text-emerald-400"
-    },
-    {
-      id: "romantic",
-      title: "Late Night",
-      desc: "Slow & Deep.",
-      icon: Heart,
-      color: "from-pink-600 to-black",
-      textColor: "text-pink-500"
+  const fetchArtists = useCallback(async () => {
+    try {
+      const response = await fetch(`${API_URL}/api/artists`);
+      if (response.ok) {
+        const data = await response.json();
+        const formattedArtists = data.map(artist => ({
+          name: artist.name,
+          image: artist.image_url || "https://placehold.co/400x400/181818/ffffff?text=No+Image", 
+          path: `/artist/${encodeURIComponent(artist.name)}`
+        }));
+        setHomeArtists(formattedArtists);
+      }
+    } catch (error) {
+      console.error('Error fetching artists:', error);
     }
-  ];
+  }, []);
 
-  const categories = [
-    { title: "Jump Back In", artists: homeArtists.slice(0, 6), type: "artist" },
-    { title: "Your Top Artists", artists: homeArtists.slice(6, 12), type: "artist" },
-    {
-      title: "Recommended Playlists",
-      artists: homeArtists.slice(12, 20).concat(homeArtists.slice(0, 2)),
-      type: "artist",
-    },
-  ].filter(cat => cat.artists.length > 0); 
+  useEffect(() => {
+    fetchTracks();
+    fetchArtists();
+  }, [fetchTracks, fetchArtists]);
+
+  const handleArtistClick = useCallback((artist) => {
+    navigate(`/artist/${encodeURIComponent(artist.name)}`, { state: { image: artist.image } }); 
+  }, [navigate]);
+
+  const categories = useMemo(() => {
+    return [
+      { title: "Jump Back In", artists: homeArtists.slice(0, 6), type: "artist" },
+      { title: "Your Top Artists", artists: homeArtists.slice(6, 12), type: "artist" },
+      {
+        title: "Recommended Playlists",
+        artists: homeArtists.slice(12, 20).concat(homeArtists.slice(0, 2)),
+        type: "artist",
+      },
+    ].filter(cat => cat.artists.length > 0);
+  }, [homeArtists]);
 
   return (
     <div className="relative w-full min-h-screen text-white overflow-x-hidden bg-black">

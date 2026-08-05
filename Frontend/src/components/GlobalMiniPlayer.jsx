@@ -3,6 +3,7 @@ import { PlayerContext } from "../context/PlayerContext";
 import { Shuffle, SkipBack, Play, Pause, SkipForward, Volume2, VolumeX, Heart, PlusCircle } from "lucide-react"; 
 import { useUser } from "@clerk/clerk-react"; 
 import AddToPlaylistModal from './AddToPlaylistModal'; 
+import { API_URL } from "../config.js";
 
 const formatTime = (sec) => {
   if (!sec || isNaN(sec)) return "0:00";
@@ -51,7 +52,7 @@ const GlobalMiniPlayer = () => {
     const checkLikeStatus = async () => {
       try {
         const email = user.primaryEmailAddress.emailAddress;
-        const res = await fetch('http://localhost:5000/api/likes/check', {
+        const res = await fetch(`${API_URL}/api/likes/check`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ email, audio_url: currentAudioUrl }) 
@@ -96,7 +97,7 @@ const GlobalMiniPlayer = () => {
 
     try {
       if (isLiked) {
-        const response = await fetch('http://localhost:5000/api/likes', {
+        const response = await fetch(`${API_URL}/api/likes`, {
           method: 'DELETE',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ email, audio_url: currentAudioUrl }),
@@ -111,7 +112,7 @@ const GlobalMiniPlayer = () => {
            alert("Server refused to Unlike. Check console!");
         }
       } else {
-        const response = await fetch('http://localhost:5000/api/likes', {
+        const response = await fetch(`${API_URL}/api/likes`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ email, audio_url: currentAudioUrl }),

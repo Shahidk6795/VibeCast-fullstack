@@ -1,8 +1,9 @@
-import React, { useState, useEffect, useContext } from "react";
+import React, { useState, useEffect, useContext, useCallback, useMemo } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { PlayerContext } from "../context/PlayerContext";
 import AddToPlaylistModal from "@/components/AddToPlaylistModal";
 import { MoreVertical, Clock, Play } from "lucide-react";
+import { API_URL } from "../config.js";
 
 const formatTime = (sec) => {
   if (!sec) return "0:00";
@@ -15,7 +16,7 @@ const SearchResults = () => {
   const location = useLocation();
   const navigate = useNavigate();
   
-  const getQuery = () => new URLSearchParams(location.search).get("query") || "";
+  const getQuery = useCallback(() => new URLSearchParams(location.search).get("query") || "", [location.search]);
   
   const [searchTerm, setSearchTerm] = useState(getQuery());
   
@@ -30,7 +31,6 @@ const SearchResults = () => {
 
   const { 
     playPlaylist, 
-    playPause, 
     isPlaying, 
     playlist, 
     currentSongIndex, 
@@ -38,40 +38,40 @@ const SearchResults = () => {
     setMiniPlayerVisible 
   } = useContext(PlayerContext);
 
-  useEffect(() => {
-    const fetchArtistsAndTracks = async () => {
-      try {
-        const [artistRes, trackRes] = await Promise.all([
-          fetch('http://localhost:5000/api/artists'),
-          fetch('http://localhost:5000/api/tracks')
-        ]);
-        
-        if (artistRes.ok) {
-          const artistData = await artistRes.json();
-          setDbArtists(artistData);
-          setFilteredArtists(artistData.slice(0, 5));
-        }
-        
-        if (trackRes.ok) {
-          const trackData = await trackRes.json();
-          setDbTracks(trackData);
-          setFilteredTracks(trackData.slice(0, 10));
-        }
-      } catch (err) {
-        console.error("Failed to load search data", err);
+  const fetchArtistsAndTracks = useCallback(async () => {
+    try {
+      const [artistRes, trackRes] = await Promise.all([
+        fetch(`${API_URL}/api/artists`),
+        fetch(`${API_URL}/api/tracks`)
+      ]);
+      
+      if (artistRes.ok) {
+        const artistData = await artistRes.json();
+        setDbArtists(artistData);
+        setFilteredArtists(artistData.slice(0, 5));
       }
-    };
-    fetchArtistsAndTracks();
+      
+      if (trackRes.ok) {
+        const trackData = await trackRes.json();
+        setDbTracks(trackData);
+        setFilteredTracks(trackData.slice(0, 10));
+      }
+    } catch {
+      console.error("Failed to load search data");
+    }
   }, []);
 
   useEffect(() => {
+    fetchArtistsAndTracks();
+  }, [fetchArtistsAndTracks]);
+
+  useEffect(() => {
     setSearchTerm(getQuery());
-  }, [location.search]);
+  }, [location.search, getQuery]);
 
   useEffect(() => {
     const q = searchTerm.toLowerCase().trim();
     if (!q) {
-      // WHEN EMPTY: Show top 5 artists and top 10 songs
       setFilteredArtists(dbArtists.slice(0, 5));
       setFilteredTracks(dbTracks.slice(0, 10));
     } else {
@@ -90,19 +90,21 @@ const SearchResults = () => {
     }
   }, [searchTerm, dbArtists, dbTracks]);
 
-  const formattedSongs = filteredTracks.map(track => ({
-    name: track.title,
-    artist: track.artist,
-    path: track.audio_url,
-    image: track.cover_url,
-    id: track.id,
-    duration: track.duration || "--:--"
-  }));
+  const formattedSongs = useMemo(() => {
+    return filteredTracks.map(track => ({
+      name: track.title,
+      artist: track.artist,
+      path: track.audio_url,
+      image: track.cover_url,
+      id: track.id,
+      duration: track.duration || "--:--"
+    }));
+  }, [filteredTracks]);
 
-  const selectSong = (index) => {
+  const selectSong = useCallback((index) => {
     playPlaylist(formattedSongs, index, true);
     if (setMiniPlayerVisible) setMiniPlayerVisible(true);
-  };
+  }, [formattedSongs, playPlaylist, setMiniPlayerVisible]);
 
   return (
     <div className="min-h-screen relative overflow-x-hidden text-white flex flex-col items-center px-6 py-10 bg-gradient-to-br from-black via-[#120016] to-black animate-gradient-slow pb-32 cursor-default select-none">
@@ -137,7 +139,6 @@ const SearchResults = () => {
                     onClick={() => navigate(`/artist/${encodeURIComponent(artist.name)}`, { state: { image: artist.image_url } })}
                     className="group relative bg-black/60 border border-pink-500/20 rounded-2xl p-5 flex flex-col items-center backdrop-blur-xl hover:border-pink-500/40 hover:shadow-[0_0_25px_rgba(236,72,153,0.6)] hover:-translate-y-1 transition-all duration-300 cursor-pointer"
                   >
-                    {/* 🟢 FIXED: Artist Images now have the loop-breaker and lazy loading */}
                     <img
                       src={artist.image_url}
                       alt={artist.name}
@@ -193,7 +194,6 @@ const SearchResults = () => {
                         )}
                       </div>
 
-                      {/* 🟢 FIXED: Song Covers now have the loop-breaker and lazy loading */}
                       <img 
                         src={song.image} 
                         alt={song.name} 

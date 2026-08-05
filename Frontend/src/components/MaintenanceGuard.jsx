@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useUser } from "@clerk/clerk-react";
 import MaintenanceScreen from "./MaintenanceScreen";
+import { API_URL } from "../config.js";
 
 const MaintenanceGuard = ({ children }) => {
   const { user, isLoaded } = useUser();
@@ -12,7 +13,7 @@ const MaintenanceGuard = ({ children }) => {
 
     const checkMaintenance = async () => {
       try {
-        const res = await fetch('http://localhost:5000/api/settings');
+        const res = await fetch(`${API_URL}/api/settings`);
         if (res.ok) {
           const data = await res.json();
           if (isMounted) setIsMaintenanceMode(data.maintenance_mode);

@@ -1,6 +1,7 @@
 /* eslint-disable no-unused-vars */
 import React, { useState, useEffect } from 'react';
 import { Upload, Disc, CheckCircle, AlertCircle, UserPlus, Music, Trash2 } from 'lucide-react';
+import { API_URL } from './config.js';
 
 const Admin = () => {
   const [activeTab, setActiveTab] = useState('tracks'); 
@@ -69,14 +70,16 @@ const Admin = () => {
 
   const fetchArtists = async () => {
     try {
-      const res = await fetch('http://localhost:5000/api/artists');
+      // FIX 1: Replaced localhost with API_URL
+      const res = await fetch(`${API_URL}/api/artists`);
       if (res.ok) setDbArtists(await res.json());
     } catch (err) { console.error("Failed to load artists", err); }
   };
 
   const fetchTracks = async () => {
     try {
-      const res = await fetch('http://localhost:5000/api/tracks');
+      // FIX 2: Replaced localhost with API_URL and fixed missing 'const res = await'
+      const res = await fetch(`${API_URL}/api/tracks`);
       if (res.ok) setDbTracks(await res.json());
     } catch (err) { console.error("Failed to load tracks", err); }
   };
@@ -120,7 +123,8 @@ const Admin = () => {
     };
 
     try {
-      const response = await fetch('http://localhost:5000/api/tracks', {
+      // FIX 3: Replaced localhost with API_URL
+      const response = await fetch(`${API_URL}/api/tracks`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
@@ -142,7 +146,8 @@ const Admin = () => {
   const handleArtistSubmit = async (e) => {
     e.preventDefault();
     try {
-      const response = await fetch('http://localhost:5000/api/artists', {
+      // FIX 4: Replaced localhost with API_URL
+      const response = await fetch(`${API_URL}/api/artists`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(newArtistData),
       });
 
@@ -156,7 +161,8 @@ const Admin = () => {
 
   const saveTrackUpdate = async () => {
     try {
-      const response = await fetch(`http://localhost:5000/api/tracks/admin/${editPopup.trackId}`, {
+      // FIX 5: Replaced localhost with API_URL
+      const response = await fetch(`${API_URL}/api/tracks/admin/${editPopup.trackId}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ 
@@ -188,7 +194,8 @@ const Admin = () => {
 
   const executeDelete = async () => {
     try {
-      const response = await fetch(`http://localhost:5000/api/tracks/admin/${deleteConfirm.trackId}`, {
+      // FIX 6: Replaced localhost with API_URL
+      const response = await fetch(`${API_URL}/api/tracks/admin/${deleteConfirm.trackId}`, {
         method: 'DELETE'
       });
 
@@ -207,7 +214,8 @@ const Admin = () => {
 
   const executeArtistDelete = async () => {
     try {
-      const response = await fetch(`http://localhost:5000/api/artists/${deleteArtistConfirm.artistId}`, {
+      // FIX 7: Replaced localhost with API_URL
+      const response = await fetch(`${API_URL}/api/artists/${deleteArtistConfirm.artistId}`, {
         method: 'DELETE'
       });
 

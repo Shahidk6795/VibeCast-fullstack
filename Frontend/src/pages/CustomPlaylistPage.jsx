@@ -1,8 +1,9 @@
-import React, { useState, useEffect, useContext, useRef } from 'react';
+import React, { useState, useEffect, useContext, useRef, useCallback, useMemo } from 'react';
 import { useParams, useLocation, useNavigate } from 'react-router-dom';
 import { PlayerContext } from "../context/PlayerContext";
 import { useUser } from "@clerk/clerk-react";
 import { ArrowLeft, Clock, Music, Trash2, Camera, Pencil } from "lucide-react"; 
+import { API_URL } from '../config.js';
 
 const formatTime = (sec) => {
   if (!sec) return "0:00";
@@ -10,8 +11,6 @@ const formatTime = (sec) => {
   const seconds = Math.floor(sec % 60).toString().padStart(2, "0");
   return `${minutes}:${seconds}`;
 };
-
-// 🟢 DELETED: The dangerous TrackDuration component is gone!
 
 const CustomPlaylistPage = () => {
   const { id } = useParams();
@@ -32,7 +31,6 @@ const CustomPlaylistPage = () => {
   } = useContext(PlayerContext);
   
   const [songs, setSongs] = useState([]);
-  
   const [playlistCover, setPlaylistCover] = useState(null);
   const [isUploading, setIsUploading] = useState(false);
   const fileInputRef = useRef(null);
@@ -45,9 +43,9 @@ const CustomPlaylistPage = () => {
     window.scrollTo(0, 0);
   }, []);
 
-  const fetchPlaylistSongs = async () => {
+  const fetchPlaylistSongs = useCallback(async () => {
     try {
-      const res = await fetch(`http://localhost:5000/api/playlists/${id}/songs`);
+      const res = await fetch(`${API_URL}/api/playlists/${id}/songs`);
       if (res.ok) {
         const data = await res.json();
         setSongs(data);
@@ -55,11 +53,11 @@ const CustomPlaylistPage = () => {
     } catch (e) {
       console.error("Failed to fetch custom playlist songs", e);
     }
-  };
+  }, [id]);
 
-  const fetchPlaylistDetails = async () => {
+  const fetchPlaylistDetails = useCallback(async () => {
     try {
-      const res = await fetch(`http://localhost:5000/api/playlists/details/${id}`);
+      const res = await fetch(`${API_URL}/api/playlists/details/${id}`);
       if (res.ok) {
         const data = await res.json();
         if (data.cover_url) setPlaylistCover(data.cover_url);
@@ -71,12 +69,12 @@ const CustomPlaylistPage = () => {
     } catch (e) {
       console.error("Failed to fetch playlist details", e);
     }
-  };
+  }, [id]);
 
   useEffect(() => {
     fetchPlaylistSongs();
     fetchPlaylistDetails();
-  }, [id]);
+  }, [fetchPlaylistSongs, fetchPlaylistDetails]);
 
   const handleCoverUpload = async (event) => {
     const file = event.target.files[0];
@@ -87,7 +85,7 @@ const CustomPlaylistPage = () => {
     formData.append('coverImage', file);
 
     try {
-      const res = await fetch(`http://localhost:5000/api/playlists/${id}/cover`, {
+      const res = await fetch(`${API_URL}/api/playlists/${id}/cover`, {
         method: 'POST',
         body: formData,
       });
@@ -113,7 +111,7 @@ const CustomPlaylistPage = () => {
     }
 
     try {
-      const res = await fetch(`http://localhost:5000/api/playlists/${id}/name`, {
+      const res = await fetch(`${API_URL}/api/playlists/${id}/name`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ name: trimmedName })
@@ -129,16 +127,18 @@ const CustomPlaylistPage = () => {
     }
   };
 
-  const formattedSongs = songs.map(song => ({
-    name: song.title || song.name,
-    artist: song.artist,
-    path: song.audio_url || song.path,
-    image: song.cover_url || song.image,
-    id: song.id,
-    duration: song.duration || "--:--" // 🟢 ADDED: Bandwidth shield maps duration from DB
-  }));
+  const formattedSongs = useMemo(() => {
+    return songs.map(song => ({
+      name: song.title || song.name,
+      artist: song.artist,
+      path: song.audio_url || song.path,
+      image: song.cover_url || song.image,
+      id: song.id,
+      duration: song.duration || "--:--" 
+    }));
+  }, [songs]);
 
-  const handlePlayPause = () => {
+  const handlePlayPause = useCallback(() => {
     if (!formattedSongs.length) return;
     
     if (!playlist || playlist.length === 0 || playlist[0].name !== formattedSongs[0]?.name) {
@@ -148,7 +148,7 @@ const CustomPlaylistPage = () => {
     }
     
     if (setMiniPlayerVisible) setMiniPlayerVisible(true);
-  };
+  }, [formattedSongs, playlist, playPlaylist, playPause, setMiniPlayerVisible]);
 
   useEffect(() => {
     const handleKeyDown = (event) => {
@@ -160,17 +160,17 @@ const CustomPlaylistPage = () => {
     };
     window.addEventListener("keydown", handleKeyDown, true);
     return () => window.removeEventListener("keydown", handleKeyDown, true);
-  }, [playlist, handlePlayPause]);
+  }, [handlePlayPause]);
 
-  const handlePlaySingle = (index) => {
+  const handlePlaySingle = useCallback((index) => {
     playPlaylist(formattedSongs, index, true);
     if (setMiniPlayerVisible) setMiniPlayerVisible(true);
-  };
+  }, [playPlaylist, formattedSongs, setMiniPlayerVisible]);
 
   const removeSong = async (e, songId) => {
     e.stopPropagation(); 
     try {
-      const response = await fetch(`http://localhost:5000/api/playlists/songs/${songId}`, {
+      const response = await fetch(`${API_URL}/api/playlists/songs/${songId}`, {
         method: 'DELETE',
       });
 
@@ -327,7 +327,6 @@ const CustomPlaylistPage = () => {
                 </div>
 
                 <div className="text-right text-sm text-gray-400">
-                  {/* 🟢 CHANGED: Bandwidth shield deployed! Just prints text from the database */}
                   {isCurrentSong
                     ? formatTime(duration)
                     : song.duration

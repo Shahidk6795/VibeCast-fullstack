@@ -1,10 +1,9 @@
 import React, { useState, useEffect, useContext } from "react";
 import { TrendingUp, Play, Activity } from "lucide-react";
-import { useNavigate } from "react-router-dom";
 import { PlayerContext } from "../context/PlayerContext";
+import { API_URL } from "../config.js";
 
 const Trending = () => {
-  const navigate = useNavigate();
   const [trendingList, setTrendingList] = useState([]);
   const [isUpdating, setIsUpdating] = useState(false);
   
@@ -15,7 +14,7 @@ const Trending = () => {
   useEffect(() => {
     const fetchTracks = async () => {
       try {
-        const res = await fetch('http://localhost:5000/api/tracks');
+        const res = await fetch(`${API_URL}/api/tracks`);
         if (res.ok) {
           const data = await res.json();
           

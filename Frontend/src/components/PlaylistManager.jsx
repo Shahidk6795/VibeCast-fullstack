@@ -1,7 +1,8 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useUser } from '@clerk/clerk-react';
 import { Plus, X, Music, Trash2 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
+import { API_URL } from '../config.js';
 
 const PlaylistManager = () => {
   const { user, isLoaded } = useUser();
@@ -13,10 +14,11 @@ const PlaylistManager = () => {
 
   const email = user?.primaryEmailAddress?.emailAddress;
 
-  const fetchPlaylists = async () => {
+  // 🟢 OPTIMIZATION: Wrapped in useCallback to protect bandwidth
+  const fetchPlaylists = useCallback(async () => {
     if (!email) return;
     try {
-      const response = await fetch(`http://localhost:5000/api/playlists/${encodeURIComponent(email)}`);
+      const response = await fetch(`${API_URL}/api/playlists/${encodeURIComponent(email)}`);
       if (response.ok) {
         const data = await response.json();
         setPlaylists(data);
@@ -24,19 +26,19 @@ const PlaylistManager = () => {
     } catch (error) {
       console.error("Error fetching playlists:", error);
     }
-  };
+  }, [email]);
 
   useEffect(() => {
     if (isLoaded && email) {
       fetchPlaylists();
     }
-  }, [isLoaded, email]);
+  }, [isLoaded, email, fetchPlaylists]);
 
   const handleCreatePlaylist = async () => {
     if (!newPlaylistName.trim() || !email) return;
     setIsLoading(true);
     try {
-      const response = await fetch('http://localhost:5000/api/playlists', {
+      const response = await fetch(`${API_URL}/api/playlists`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email, name: newPlaylistName.trim() })
@@ -56,7 +58,7 @@ const PlaylistManager = () => {
     e.stopPropagation();
     if (!window.confirm("Are you sure you want to delete this playlist?")) return;
     try {
-      const response = await fetch(`http://localhost:5000/api/playlists/${id}`, { method: 'DELETE' });
+      const response = await fetch(`${API_URL}/api/playlists/${id}`, { method: 'DELETE' });
       if (response.ok) {
         setPlaylists(playlists.filter(p => p.id !== id));
       }

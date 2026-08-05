@@ -1,15 +1,44 @@
-import React, { useContext, useEffect, useState } from 'react';
+import React, { useContext, useEffect, useState, useCallback, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { PlayerContext } from '../context/PlayerContext';
 import AddToPlaylistModal from '@/components/AddToPlaylistModal';
 import { useUser } from "@clerk/clerk-react";
 import { Dumbbell, Coffee, Heart, Clock, Play, Pause, ArrowLeft, MoreVertical } from 'lucide-react';
+import { API_URL } from '../config.js';
 
 const formatTime = (sec) => {
   if (!sec) return "0:00";
   const minutes = Math.floor(sec / 60);
   const seconds = Math.floor(sec % 60).toString().padStart(2, "0");
   return `${minutes}:${seconds}`;
+};
+
+// 🟢 OPTIMIZATION: Moved outside the component so it isn't recreated on every render
+const baseMoodConfig = {
+  workout: {
+    title: "Iron Paradise",
+    desc: "Pure Adrenaline. Push your limits.",
+    icon: Dumbbell,
+    color: "from-red-900 to-black",
+    textColor: "text-red-500",
+    accent: "bg-red-600"
+  },
+  relax: {
+    title: "Zen Mode",
+    desc: "Lo-Fi & Chill. Clear your mind.",
+    icon: Coffee,
+    color: "from-slate-800 to-black",
+    textColor: "text-emerald-400",
+    accent: "bg-emerald-600"
+  },
+  romantic: {
+    title: "Late Night",
+    desc: "Slow & Deep. For the feels.",
+    icon: Heart,
+    color: "from-rose-900 to-black",
+    textColor: "text-rose-500",
+    accent: "bg-rose-600"
+  }
 };
 
 const MoodPlaylist = () => {
@@ -36,39 +65,12 @@ const MoodPlaylist = () => {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [selectedSong, setSelectedSong] = useState(null);
 
-  const baseMoodConfig = {
-    workout: {
-      title: "Iron Paradise",
-      desc: "Pure Adrenaline. Push your limits.",
-      icon: Dumbbell,
-      color: "from-red-900 to-black",
-      textColor: "text-red-500",
-      accent: "bg-red-600"
-    },
-    relax: {
-      title: "Zen Mode",
-      desc: "Lo-Fi & Chill. Clear your mind.",
-      icon: Coffee,
-      color: "from-slate-800 to-black",
-      textColor: "text-emerald-400",
-      accent: "bg-emerald-600"
-    },
-    romantic: {
-      title: "Late Night",
-      desc: "Slow & Deep. For the feels.",
-      icon: Heart,
-      color: "from-rose-900 to-black",
-      textColor: "text-rose-500",
-      accent: "bg-rose-600"
-    }
-  };
-
   useEffect(() => {
     window.scrollTo(0, 0);
 
     const fetchTracks = async () => {
       try {
-        const res = await fetch(`http://localhost:5000/api/moods/${id}/tracks`);
+        const res = await fetch(`${API_URL}/api/moods/${id}/tracks`);
         if (res.ok) {
           const data = await res.json();
           setMoodTracks(data);
@@ -109,10 +111,10 @@ const MoodPlaylist = () => {
     }
   }, [moodTracks]);
 
-  const fetchLikedSongs = async () => {
+  const fetchLikedSongs = useCallback(async () => {
     if (!email) return;
     try {
-      const res = await fetch(`http://localhost:5000/api/likes/${email}`);
+      const res = await fetch(`${API_URL}/api/likes/${email}`);
       if (res.ok) {
         const data = await res.json();
         setLikedSongs(data);
@@ -120,13 +122,13 @@ const MoodPlaylist = () => {
     } catch (e) {
       console.error("Failed to fetch liked songs", e);
     }
-  };
+  }, [email]);
 
   useEffect(() => {
     fetchLikedSongs();
     window.addEventListener('vibecast_likes_updated', fetchLikedSongs);
     return () => window.removeEventListener('vibecast_likes_updated', fetchLikedSongs);
-  }, [email]);
+  }, [email, fetchLikedSongs]);
 
   const toggleLike = async (e, song) => {
     e.stopPropagation();
@@ -136,7 +138,7 @@ const MoodPlaylist = () => {
     const method = isLiked ? 'DELETE' : 'POST';
 
     try {
-      const response = await fetch('http://localhost:5000/api/likes', {
+      const response = await fetch(`${API_URL}/api/likes`, {
         method,
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email, audio_url: song.audio_url }),
@@ -151,12 +153,16 @@ const MoodPlaylist = () => {
     }
   };
 
-  const currentMood = baseMoodConfig[id] ? { ...baseMoodConfig[id], data: moodTracks } : null;
+  // 🟢 OPTIMIZATION: Memoized so it isn't recreated on every render
+  const currentMood = useMemo(() => {
+    return baseMoodConfig[id] ? { ...baseMoodConfig[id], data: moodTracks } : null;
+  }, [id, moodTracks]);
   
   const isThisPlaylistActive = playlist?.length > 0 && currentMood?.data?.length > 0 && playlist[0]?.path === currentMood.data[0]?.audio_url;
   const coverImage = currentMood?.data?.length > 0 ? currentMood.data[0].cover_url : null;
 
-  const handlePlayPause = () => {
+  // 🟢 OPTIMIZATION: Added useCallback with dependency array
+  const handlePlayPause = useCallback(() => {
     if (!currentMood || currentMood.data.length === 0) return;
 
     const formattedTracks = currentMood.data.map(track => ({
@@ -172,7 +178,7 @@ const MoodPlaylist = () => {
     } else {
       playPlaylist(formattedTracks, 0);
     }
-  };
+  }, [currentMood, isThisPlaylistActive, playPause, playPlaylist]);
 
   useEffect(() => {
     const handleKeyDown = (event) => {
@@ -185,7 +191,7 @@ const MoodPlaylist = () => {
 
     window.addEventListener("keydown", handleKeyDown, true);
     return () => window.removeEventListener("keydown", handleKeyDown, true);
-  }, [isThisPlaylistActive, currentMood, playPlaylist, playPause]); 
+  }, [handlePlayPause]); // 🟢 OPTIMIZATION: Simplified to just rely on the stable handlePlayPause function
 
   if (!currentMood) return <div className="text-white p-10 pt-24">Playlist not found</div>;
 

@@ -1,9 +1,10 @@
-import React, { useState, useEffect, useContext } from 'react';
+import React, { useState, useEffect, useContext, useCallback, useMemo } from 'react';
 import { useUser } from "@clerk/clerk-react";
 import { useNavigate } from "react-router-dom";
 import { PlayerContext } from "../context/PlayerContext";
-import { Heart, ArrowLeft, Clock, MoreVertical } from "lucide-react"; // 🟢 ADDED: MoreVertical
-import AddToPlaylistModal from "@/components/AddToPlaylistModal"; // 🟢 ADDED: Modal
+import { Heart, ArrowLeft, Clock, MoreVertical } from "lucide-react"; 
+import AddToPlaylistModal from "@/components/AddToPlaylistModal"; 
+import { API_URL } from "../config.js";
 
 const formatTime = (sec) => {
   if (!sec) return "0:00";
@@ -30,7 +31,6 @@ const LikedSongsPage = () => {
   
   const [likedSongs, setLikedSongs] = useState([]);
   
-  // 🟢 NEW: Modal State
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [selectedSong, setSelectedSong] = useState(null);
   
@@ -40,10 +40,10 @@ const LikedSongsPage = () => {
     window.scrollTo(0, 0);
   }, []);
 
-  const fetchLikedSongs = async () => {
+  const fetchLikedSongs = useCallback(async () => {
     if (!email) return;
     try {
-      const res = await fetch(`http://localhost:5000/api/likes/${email}`);
+      const res = await fetch(`${API_URL}/api/likes/${email}`);
       if (res.ok) {
         const data = await res.json();
         setLikedSongs(data);
@@ -51,24 +51,26 @@ const LikedSongsPage = () => {
     } catch (e) {
       console.error("Failed to fetch liked songs", e);
     }
-  };
+  }, [email]);
 
   useEffect(() => {
     fetchLikedSongs();
     window.addEventListener('vibecast_likes_updated', fetchLikedSongs);
     return () => window.removeEventListener('vibecast_likes_updated', fetchLikedSongs);
-  }, [email]);
+  }, [email, fetchLikedSongs]);
 
-  const formattedSongs = likedSongs.map(song => ({
-    name: song.name || song.title,
-    artist: song.artist,
-    path: song.path || song.audio_url,
-    image: song.image || song.cover_url,
-    id: song.track_id || song.id,
-    duration: song.duration || "--:--" 
-  }));
+  const formattedSongs = useMemo(() => {
+    return likedSongs.map(song => ({
+      name: song.name || song.title,
+      artist: song.artist,
+      path: song.path || song.audio_url,
+      image: song.image || song.cover_url,
+      id: song.track_id || song.id,
+      duration: song.duration || "--:--" 
+    }));
+  }, [likedSongs]);
 
-  const handlePlayPause = () => {
+  const handlePlayPause = useCallback(() => {
     if (!formattedSongs.length) return;
     
     if (!playlist.length || playlist[0].name !== formattedSongs[0]?.name) {
@@ -78,7 +80,7 @@ const LikedSongsPage = () => {
     }
     
     if (setMiniPlayerVisible) setMiniPlayerVisible(true);
-  };
+  }, [formattedSongs, playlist, playPlaylist, playPause, setMiniPlayerVisible]);
 
   useEffect(() => {
     const handleKeyDown = (event) => {
@@ -100,7 +102,7 @@ const LikedSongsPage = () => {
   const removeLike = async (e, song) => {
     e.stopPropagation(); 
     try {
-      const response = await fetch('http://localhost:5000/api/likes', {
+      const response = await fetch(`${API_URL}/api/likes`, {
         method: 'DELETE',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email: email, audio_url: song.path || song.audio_url }),
@@ -164,7 +166,6 @@ const LikedSongsPage = () => {
           </button>
         </div>
 
-        {/* 🟢 CHANGED: Grid expanded to 80px on the end to fit both buttons cleanly */}
         <div className="grid grid-cols-[16px_48px_1fr_60px_80px] gap-4 py-2 px-2 border-b border-gray-700/50 text-gray-400 text-xs uppercase font-semibold mb-2 pointer-events-none">
           <div className="text-center">#</div>
           <div></div>
@@ -214,7 +215,6 @@ const LikedSongsPage = () => {
                   }
                 </div>
 
-                {/* 🟢 CHANGED: Flex container holding both the Heart and the 3-dots */}
                 <div className="flex justify-end items-center gap-1">
                   <button 
                     onClick={(e) => removeLike(e, song)} 
@@ -247,7 +247,6 @@ const LikedSongsPage = () => {
         </div>
       </div>
 
-      {/* 🟢 NEW: Added the Modal to the root level */}
       <AddToPlaylistModal 
         isOpen={isModalOpen}
         onClose={() => setIsModalOpen(false)}

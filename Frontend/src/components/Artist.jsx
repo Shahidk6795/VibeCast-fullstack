@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { Play, Search, X, Sparkles, Music2 } from "lucide-react";
+import { API_URL } from '../config.js';
 
 const Artists = () => {
   const navigate = useNavigate();
@@ -16,7 +17,8 @@ const Artists = () => {
   useEffect(() => {
     const fetchArtists = async () => {
       try {
-        const response = await fetch('http://localhost:5000/api/artists');
+        // FIX: Replaced localhost with API_URL
+        const response = await fetch(`${API_URL}/api/artists`);
         if (response.ok) {
           const data = await response.json();
           

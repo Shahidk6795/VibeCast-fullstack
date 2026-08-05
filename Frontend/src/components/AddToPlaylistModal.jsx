@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useUser } from '@clerk/clerk-react';
 import { X, ListMusic, Check } from 'lucide-react';
+import { API_URL } from '../config.js';
 
 const AddToPlaylistModal = ({ isOpen, onClose, track }) => {
   const { user } = useUser();
@@ -11,7 +12,8 @@ const AddToPlaylistModal = ({ isOpen, onClose, track }) => {
 
   useEffect(() => {
     if (isOpen && email) {
-      fetch(`http://localhost:5000/api/playlists/${encodeURIComponent(email)}`)
+      // FIX 1: Replaced localhost with API_URL
+      fetch(`${API_URL}/api/playlists/${encodeURIComponent(email)}`)
         .then(res => res.json())
         .then(data => setPlaylists(data))
         .catch(err => console.error(err));
@@ -20,7 +22,8 @@ const AddToPlaylistModal = ({ isOpen, onClose, track }) => {
 
   const handleAddToPlaylist = async (playlistId) => {
     try {
-      const response = await fetch('http://localhost:5000/api/playlists/songs', {
+      // FIX 2: Replaced localhost with API_URL
+      const response = await fetch(`${API_URL}/api/playlists/songs`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useUser } from "@clerk/clerk-react";
 import { useNavigate } from "react-router-dom";
 import { Heart } from "lucide-react";
+import { API_URL } from "../config.js";
 
 const LikedSongsCard = () => {
   const { user } = useUser();
@@ -15,7 +16,7 @@ const LikedSongsCard = () => {
 
     const fetchLikes = async () => {
       try {
-        const res = await fetch(`http://localhost:5000/api/likes/${email}`);
+        const res = await fetch(`${API_URL}/api/likes/${email}`);
         if (res.ok) {
           const data = await res.json();
           setLikedCount(data.length);
@@ -34,7 +35,6 @@ const LikedSongsCard = () => {
 
   return (
     <div 
-      // 🟢 NEW: This now navigates to the playlist page!
       onClick={() => navigate('/liked-songs')}
       className="relative flex flex-col items-center justify-center p-4 bg-gradient-to-br from-indigo-700 to-purple-800 rounded-xl cursor-pointer group hover:shadow-2xl hover:scale-105 transition-all w-48 h-64 border border-white/10"
     >
