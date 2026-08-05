@@ -97,7 +97,6 @@ const ArtistPage = () => {
   const finalQuote = dbArtistData?.quote || "Discover the top hits and latest drops. 🎵";
   const finalImage = location.state?.image || dbArtistData?.image_url || "https://ik.imagekit.io/VibeCast/images/default-artist.jpg";
 
-  // New useEffect specifically for color extraction
   useEffect(() => {
     if (!finalImage) return;
 
@@ -105,7 +104,6 @@ const ArtistPage = () => {
     
     fac.getColorAsync(finalImage, { algorithm: 'dominant' })
       .then(color => {
-        // color.hex gives us the dominant color from the image
         setThemeDetails(prev => ({
           ...prev,
           themeFrom: color.hex,
