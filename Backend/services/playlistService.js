@@ -58,7 +58,6 @@ export const removeTrackFromPlaylist = async (playlistId, trackId) => {
   );
 };
 
-// Alternate 'Songs' variations you had in the original file
 export const getPlaylistSongs = async (playlistId) => {
   const [rows] = await pool.query('SELECT * FROM playlist_tracks WHERE playlist_id = ? ORDER BY added_at DESC', [playlistId]);
   return rows;

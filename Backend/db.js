@@ -10,7 +10,6 @@ const pool = mysql.createPool({
   database: process.env.DB_NAME,
   port: process.env.DB_PORT,
   ssl: {
-    // 🟢 Read the certificate directly from the environment variable string
     ca: process.env.DB_SSL_CA_CERT
   }
 });

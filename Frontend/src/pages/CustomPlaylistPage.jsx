@@ -89,7 +89,7 @@ const CustomPlaylistPage = () => {
         method: 'POST',
         body: formData,
       });
-      
+      console.log("Upload response:", res);
       if (res.ok) {
         const data = await res.json();
         setPlaylistCover(data.cover_url);
