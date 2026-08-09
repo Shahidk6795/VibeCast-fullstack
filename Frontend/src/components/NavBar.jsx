@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { User, Home, Disc, Flame, Search, Upload, LayoutDashboard } from "lucide-react"; 
-import { useUser } from "@clerk/clerk-react";
+import { useUser, useClerk } from "@clerk/clerk-react";
 import logo from "../assets/logo.png";
 
 const Navbar = () => {
@@ -10,6 +10,7 @@ const Navbar = () => {
   const [scrolled, setScrolled] = useState(false);
   
   const { user, isSignedIn } = useUser();
+  const { openSignIn } = useClerk();
   
   const ADMIN_EMAIL = import.meta.env.VITE_ADMIN_EMAIL; 
   const isAdmin = isSignedIn && user?.primaryEmailAddress?.emailAddress === ADMIN_EMAIL;
@@ -28,7 +29,8 @@ const Navbar = () => {
     { name: "Artists", path: "/artists", icon: Disc }, 
     { name: "Trending", path: "/trending", icon: Flame }, 
     ...(isAdmin ? [{ name: "Studio", path: "/admin", icon: Upload }] : []),
-    ...(isSignedIn && !isAdmin ? [{ name: "Profile", path: "/profile", icon: LayoutDashboard }] : [])
+    // Fix: Allow all signed-in users (including admins) to see the Profile tab
+    ...(isSignedIn ? [{ name: "Profile", path: "/profile", icon: LayoutDashboard }] : [])
   ];
 
   const getDesktopClass = (path) =>
@@ -73,6 +75,7 @@ const Navbar = () => {
               <button
                 key={item.name}
                 onClick={() => navigate(item.path)}
+                aria-current={location.pathname === item.path ? "page" : undefined}
                 className={`relative flex items-center gap-2 text-sm uppercase tracking-wide transition-all duration-300 group ${getDesktopClass(item.path)}`}
               >
                 <item.icon className={`w-4 h-4 transition-colors duration-300 ${location.pathname === item.path ? "text-pink-500" : "text-gray-500 group-hover:text-pink-400"}`} />
@@ -83,8 +86,16 @@ const Navbar = () => {
 
           <div className="flex items-center gap-4 flex-1 justify-end md:flex-none">
             <button
-              onClick={() => navigate("/profile")}
+              // Fix: Trigger Clerk Sign-In if not authenticated
+              onClick={() => {
+                if (isSignedIn) {
+                  navigate("/profile");
+                } else {
+                  openSignIn();
+                }
+              }}
               className="relative group focus:outline-none"
+              title={isSignedIn ? "Profile Settings" : "Sign In"}
             >
               <div className="absolute -inset-0.5 bg-gradient-to-tr from-pink-500 to-purple-600 rounded-full opacity-70 group-hover:opacity-100 blur transition duration-300"></div>
               <div className="relative w-9 h-9 bg-[#121212] rounded-full flex items-center justify-center border border-white/10 overflow-hidden">
@@ -104,6 +115,7 @@ const Navbar = () => {
           <button
             key={item.name}
             onClick={() => navigate(item.path)}
+            aria-current={location.pathname === item.path ? "page" : undefined}
             className="flex flex-col items-center gap-1 p-2"
           >
             <item.icon className={`w-6 h-6 transition-all duration-300 ${getMobileClass(item.path)}`} />

@@ -91,32 +91,46 @@ const Profile = () => {
     <div className="min-h-screen bg-black text-white p-6 md:p-10 pt-24 pb-32">
       <div className="max-w-6xl mx-auto space-y-10">
         
-        <div className="flex flex-col md:flex-row items-center gap-8 relative">
+        {/* Profile Header */}
+        <div className="flex flex-col md:flex-row items-center justify-between gap-8 relative">
           <div className="absolute -top-20 -left-20 w-64 h-64 bg-pink-500/20 blur-[100px] rounded-full pointer-events-none"></div>
           <div className="absolute -bottom-20 -right-20 w-64 h-64 bg-[#1db954]/20 blur-[100px] rounded-full pointer-events-none"></div>
 
-          <div className="relative w-36 h-36 md:w-48 md:h-48 rounded-full p-1 bg-gradient-to-tr from-pink-500 to-[#1db954] shadow-2xl flex-shrink-0">
-            <img 
-              src={user?.imageUrl || "https://placehold.co/400x400/181818/ffffff?text=User"} 
-              alt="Profile" 
-              className="w-full h-full object-cover rounded-full border-4 border-black" 
-            />
-          </div>
-          
-          <div className="text-center md:text-left flex-1 z-10">
-            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-white/5 border border-white/10 text-xs font-medium text-gray-300 mb-3 uppercase tracking-wider backdrop-blur-md">
-              {isAdmin ? (
-                <><ShieldAlert className="w-4 h-4 text-[#1db954]" /> Admin Account</>
-              ) : (
-                <><Music className="w-4 h-4 text-pink-400" /> VibeCast Member</>
-              )}
+          <div className="flex flex-col md:flex-row items-center gap-8 text-center md:text-left flex-1 z-10">
+            <div className="relative w-36 h-36 md:w-48 md:h-48 rounded-full p-1 bg-gradient-to-tr from-pink-500 to-[#1db954] shadow-2xl flex-shrink-0">
+              <img 
+                src={user?.imageUrl || "https://placehold.co/400x400/181818/ffffff?text=User"} 
+                alt="Profile" 
+                className="w-full h-full object-cover rounded-full border-4 border-black" 
+              />
             </div>
-            <h1 className="text-5xl md:text-7xl font-black mb-2 tracking-tight text-white drop-shadow-md">
-              {user?.firstName || "Music Lover"} {user?.lastName || ""}
-            </h1>
-            <p className="text-gray-400 font-medium text-lg">
-              {email}
-            </p>
+            
+            <div className="flex-1">
+              <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-white/5 border border-white/10 text-xs font-medium text-gray-300 mb-3 uppercase tracking-wider backdrop-blur-md">
+                {isAdmin ? (
+                  <><ShieldAlert className="w-4 h-4 text-[#1db954]" /> Admin Account</>
+                ) : (
+                  <><Music className="w-4 h-4 text-pink-400" /> VibeCast Member</>
+                )}
+              </div>
+              <h1 className="text-5xl md:text-7xl font-black mb-2 tracking-tight text-white drop-shadow-md">
+                {user?.firstName || "Music Lover"} {user?.lastName || ""}
+              </h1>
+              <p className="text-gray-400 font-medium text-lg">
+                {email}
+              </p>
+            </div>
+          </div>
+
+          {/* Quick Sign Out Button at Top */}
+          <div className="z-10">
+            <button 
+              onClick={() => signOut({ redirectUrl: '/' })} 
+              className="flex items-center gap-2 px-5 py-2.5 bg-[#181818] hover:bg-red-500/10 text-gray-300 hover:text-red-500 border border-white/10 hover:border-red-500/30 rounded-full transition-all duration-300 font-semibold text-sm"
+            >
+              <LogOut className="w-4 h-4" />
+              Sign Out
+            </button>
           </div>
         </div>
 
@@ -167,7 +181,6 @@ const Profile = () => {
         </div>
 
         <div className="min-h-[400px]">
-          
           {activeTab === 'history' && (
             <div className="animate-fade-in">
               {recentSongs.length > 0 ? (
@@ -213,16 +226,6 @@ const Profile = () => {
                </div>
             </div>
           )}
-        </div>
-
-        <div className="flex justify-center pt-10 border-t border-white/10 mt-10">
-          <button 
-            onClick={() => signOut({ redirectUrl: '/' })} 
-            className="flex items-center gap-2 px-8 py-3 bg-[#181818] hover:bg-red-500/10 text-gray-400 hover:text-red-500 border border-white/5 hover:border-red-500/30 rounded-full transition-all duration-300 font-bold"
-          >
-            <LogOut className="w-5 h-5" />
-            Sign Out Securely
-          </button>
         </div>
 
       </div>
