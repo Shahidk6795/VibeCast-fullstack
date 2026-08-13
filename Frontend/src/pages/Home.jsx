@@ -17,16 +17,15 @@ const moods = [
 
 const genres = ["All", "Hip-Hop", "Pop", "Soul", "R&B", "Latin", "Rock", "EDM", "Lo-Fi"];
 
-// 1. FEATURE: Vibe-Shifting Ambient Background Colors
 const genreAmbience = {
   All: "from-[#1db954]/20 via-black to-black",
   "Hip-Hop": "from-purple-900/40 via-black to-black",
-  Pop: "from-pink-900/40 via-black to-black",
-  Soul: "from-blue-900/40 via-black to-black",
+  "Pop": "from-pink-900/40 via-black to-black",
+  "Soul": "from-blue-900/40 via-black to-black",
   "R&B": "from-amber-900/40 via-black to-black",
-  Latin: "from-yellow-900/40 via-black to-black",
-  Rock: "from-red-900/40 via-black to-black",
-  EDM: "from-emerald-900/40 via-black to-black",
+  "Latin": "from-yellow-900/40 via-black to-black",
+  "Rock": "from-red-900/40 via-black to-black",
+  "EDM": "from-emerald-900/40 via-black to-black",
   "Lo-Fi": "from-indigo-900/40 via-black to-black"
 };
 
