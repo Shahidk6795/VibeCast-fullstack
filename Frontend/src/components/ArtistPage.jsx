@@ -13,11 +13,22 @@ const formatTime = (sec) => {
   return `${minutes}:${seconds}`;
 };
 
+// Safety helpers for Images and Audio
 const getValidImage = (imageObj) => {
   if (!imageObj) return 'https://placehold.co/300x300/181818/1db954?text=Artist';
-  if (typeof imageObj === 'string') return imageObj;
+  if (typeof imageObj === 'string') {
+    if (imageObj === "[object Object]") return 'https://placehold.co/300x300/181818/1db954?text=Artist';
+    return imageObj;
+  }
   if (Array.isArray(imageObj)) return imageObj[imageObj.length - 1]?.url || imageObj[imageObj.length - 1]?.link || imageObj[0]?.url;
   return imageObj.url || imageObj.link || 'https://placehold.co/300x300/181818/1db954?text=Artist';
+};
+
+const getValidAudio = (audioObj) => {
+  if (!audioObj) return '';
+  if (typeof audioObj === 'string') return audioObj;
+  if (Array.isArray(audioObj)) return audioObj[audioObj.length - 1]?.url || audioObj[audioObj.length - 1]?.link || audioObj[0]?.url;
+  return audioObj.url || audioObj.link || '';
 };
 
 const ArtistPage = () => {
@@ -31,14 +42,12 @@ const ArtistPage = () => {
 
   const [dbArtistData, setDbArtistData] = useState(null);
   
-  // Song States
   const [displaySongs, setDisplaySongs] = useState([]);
   const [page, setPage] = useState(1);
   const [hasMore, setHasMore] = useState(true);
   const [isLoadingSongs, setIsLoadingSongs] = useState(true);
   const [isLoadingMoreSongs, setIsLoadingMoreSongs] = useState(false);
   
-  // Album States
   const [artistAlbums, setArtistAlbums] = useState([]);
   const [albumPage, setAlbumPage] = useState(1);
   const [hasMoreAlbums, setHasMoreAlbums] = useState(true);
@@ -54,24 +63,39 @@ const ArtistPage = () => {
 
   useEffect(() => { window.scrollTo(0, 0); }, []);
 
+  // FIX 1: Fetch from LIVE JioSaavn instead of dead local MySQL DB!
   useEffect(() => {
     const fetchArtistDetails = async () => {
       try {
-        const res = await fetch(`${API_URL}/api/artists/name/${encodeURIComponent(decodedArtistName)}`);
+        const res = await fetch(`${API_URL}/api/artists/search?query=${encodeURIComponent(decodedArtistName)}`);
         if (res.ok) {
           const data = await res.json();
-          setDbArtistData(data);
-          if (data.genre) setThemeDetails(prev => ({ ...prev, genre: data.genre }));
+          const artistObj = data.data?.results?.[0];
+          if (artistObj) {
+            setDbArtistData({
+              image_url: getValidImage(artistObj.image),
+              quote: "Discover the top hits and latest drops. 🎵"
+            });
+            if (artistObj.role || artistObj.description) {
+              setThemeDetails(prev => ({ ...prev, genre: artistObj.role || artistObj.description }));
+            }
+          }
         }
-      } catch (error) { console.error("Failed to fetch artist details:", error); }
+      } catch (error) { console.error("Failed to fetch live artist details:", error); }
     };
     fetchArtistDetails();
   }, [decodedArtistName]);
 
-  const finalImage = location.state?.image || dbArtistData?.image_url || "https://ik.imagekit.io/VibeCast/images/default-artist.jpg";
+  // FIX 2: Bulletproof image extraction
+  let passedImage = location.state?.image;
+  if (typeof passedImage === 'object') passedImage = getValidImage(passedImage);
+  
+  const finalImage = passedImage && passedImage !== "[object Object]" 
+    ? passedImage 
+    : (dbArtistData?.image_url || "https://ik.imagekit.io/VibeCast/images/default-artist.jpg");
 
   useEffect(() => {
-    if (!finalImage) return;
+    if (!finalImage || finalImage.includes('placehold')) return;
     const fac = new FastAverageColor();
     fac.getColorAsync(finalImage, { algorithm: 'dominant' })
       .then(color => setThemeDetails(prev => ({ ...prev, themeFrom: color.hex, themeAccent: color.isLight ? '#121212' : color.hex })))
@@ -79,7 +103,7 @@ const ArtistPage = () => {
     return () => fac.destroy();
   }, [finalImage]);
 
-  // Fetch Songs (Authenticity Filter)
+  // Fetch Songs (Smart Deduplication)
   useEffect(() => {
     const fetchDynamicTracks = async () => {
       if (page === 1) setIsLoadingSongs(true);
@@ -96,20 +120,26 @@ const ArtistPage = () => {
           const seenNames = new Set();
           
           for (const song of songs) {
-            const cleanName = song.name.trim().toLowerCase(); 
+            const rawName = (song.name || "").replace(/&quot;/g, '"');
+            const lowerName = rawName.toLowerCase();
+            const baseName = lowerName.split(' (')[0].trim();
+            
+            const isSpecialVersion = lowerName.includes('remix') || lowerName.includes('reprise') || lowerName.includes('unplugged') || lowerName.includes('acoustic') || lowerName.includes('lofi') || lowerName.includes('mashup');
+            const dedupeKey = isSpecialVersion ? lowerName : baseName;
+
             const singerStr = (song.artists?.primary?.map(a => a.name).join(', ') || song.primaryArtists || song.singers || "").toLowerCase();
             
-            const isFake = cleanName.includes("karaoke") || cleanName.includes("tribute") || cleanName.includes("cover");
+            const isFake = lowerName.includes("karaoke") || lowerName.includes("tribute") || lowerName.includes("cover");
             const isAuthentic = singerStr === "" || singerStr.includes(decodedArtistName.toLowerCase());
 
-            if (!seenNames.has(cleanName) && !isFake && isAuthentic) {
-              seenNames.add(cleanName);
+            if (!seenNames.has(dedupeKey) && !isFake && isAuthentic) {
+              seenNames.add(dedupeKey);
               uniqueSongs.push({
                 id: song.id,
-                name: song.name.replace(/&quot;/g, '"'), 
+                name: rawName, 
                 artist: song.artists?.primary?.map(a => a.name).join(', ') || decodedArtistName,
-                path: song.downloadUrl ? song.downloadUrl[song.downloadUrl.length - 1]?.url : '',
-                image: song.image ? song.image[song.image.length - 1]?.url : '',
+                path: getValidAudio(song.downloadUrl || song.url),
+                image: getValidImage(song.image),
                 duration: formatTime(song.duration)
               });
             }
@@ -128,7 +158,7 @@ const ArtistPage = () => {
     fetchDynamicTracks();
   }, [decodedArtistName, page]);
 
-  // Fetch Albums (Authenticity Filter Added)
+  // Fetch Albums 
   useEffect(() => {
     if (activeTab === "albums") {
       const fetchAlbums = async () => {
@@ -150,11 +180,7 @@ const ArtistPage = () => {
             for (const album of rawAlbums) {
               const albumName = (album.name || album.title || "").trim();
               const cleanAlbumName = albumName.toLowerCase();
-              
-              // Extract the primary artists attached to the album
               const artistStr = (album.artists?.primary?.map(a => a.name).join(', ') || album.primaryArtists || "").toLowerCase();
-              
-              // STRICT FILTER: The artist must be explicitly listed as a primary album artist
               const isAuthentic = artistStr === "" || artistStr.includes(decodedArtistName.toLowerCase());
 
               if (!seenAlbumNames.has(cleanAlbumName) && isAuthentic) {
@@ -237,10 +263,11 @@ const ArtistPage = () => {
               </button>
             </div>
             <div className="flex gap-6">
-              <button onClick={() => setSearchParams({ tab: "songs" }, { replace: true })} className={`font-bold text-base transition-colors pb-1 border-b-2 ${activeTab === "songs" ? "text-white border-[#1db954]" : "text-gray-400 border-transparent hover:text-white"}`}>
+              {/* FIX 3: Preserving location.state when switching tabs! */}
+              <button onClick={() => setSearchParams({ tab: "songs" }, { state: location.state, replace: true })} className={`font-bold text-base transition-colors pb-1 border-b-2 ${activeTab === "songs" ? "text-white border-[#1db954]" : "text-gray-400 border-transparent hover:text-white"}`}>
                 Popular Songs
               </button>
-              <button onClick={() => setSearchParams({ tab: "albums" }, { replace: true })} className={`font-bold text-base transition-colors pb-1 border-b-2 ${activeTab === "albums" ? "text-white border-[#1db954]" : "text-gray-400 border-transparent hover:text-white"}`}>
+              <button onClick={() => setSearchParams({ tab: "albums" }, { state: location.state, replace: true })} className={`font-bold text-base transition-colors pb-1 border-b-2 ${activeTab === "albums" ? "text-white border-[#1db954]" : "text-gray-400 border-transparent hover:text-white"}`}>
                 Albums & EPs
               </button>
             </div>
