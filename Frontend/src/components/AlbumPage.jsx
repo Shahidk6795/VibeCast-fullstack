@@ -16,7 +16,10 @@ const formatTime = (sec) => {
 const AlbumPage = () => {
   const navigate = useNavigate();
   const location = useLocation();
-  const { albumId } = useParams();
+  
+  // FIX: Safely grab the ID regardless of how App.jsx named the route parameter
+  const { id, albumId } = useParams();
+  const finalAlbumId = albumId || id;
 
   const [albumSongs, setAlbumSongs] = useState([]);
   const [albumInfo, setAlbumInfo] = useState({ 
@@ -30,7 +33,6 @@ const AlbumPage = () => {
   const [selectedSong, setSelectedSong] = useState(null);
   const [themeColor, setThemeColor] = useState("#121212");
 
-  // Destructuring context variables (now fully utilized in the UI)
   const { 
     playPlaylist, playPause, isPlaying, currentSongIndex, 
     playlist, duration, setMiniPlayerVisible, isShuffle, toggleShuffle 
@@ -42,7 +44,8 @@ const AlbumPage = () => {
     const fetchAlbumDetails = async () => {
       setIsLoading(true);
       try {
-        const res = await fetch(`${API_URL}/api/albums/${albumId}`);
+        // FIX: Using the corrected finalAlbumId here!
+        const res = await fetch(`${API_URL}/api/albums/${finalAlbumId}`);
         if (res.ok) {
           const data = await res.json();
           const rawAlbum = data.data || {};
@@ -71,8 +74,10 @@ const AlbumPage = () => {
         setIsLoading(false);
       }
     };
-    fetchAlbumDetails();
-  }, [albumId, location.state]);
+    if (finalAlbumId) {
+       fetchAlbumDetails();
+    }
+  }, [finalAlbumId, location.state]);
 
   useEffect(() => {
     if (!albumInfo.image) return;
@@ -83,7 +88,6 @@ const AlbumPage = () => {
     return () => fac.destroy();
   }, [albumInfo.image]);
 
-  // Now properly using playPause to pause the album if it's already playing
   const handlePlayPause = useCallback(() => {
     if (!albumSongs.length) return;
     const isCurrentAlbumPlaying = playlist && playlist.length > 0 && albumSongs.some(s => s.id === playlist[0]?.id);
@@ -122,7 +126,6 @@ const AlbumPage = () => {
         <div className="max-w-5xl mx-auto">
           <div className="flex items-center mb-6">
             <button onClick={handlePlayPause} className="w-16 h-16 rounded-full bg-[#1db954] hover:bg-[#1ed760] text-black flex items-center justify-center shadow-lg hover:scale-105 transition-all duration-300 cursor-pointer">
-              {/* Properly toggles Play/Pause icon using isPlaying */}
               {isPlaying && playlist.length > 0 && albumSongs.some(s => s.id === playlist[0]?.id) ? (
                 <svg className="w-8 h-8 fill-current" viewBox="0 0 24 24"><path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z" /></svg>
               ) : (
@@ -146,7 +149,6 @@ const AlbumPage = () => {
               return (
                 <div key={idx} onClick={() => { playPlaylist(albumSongs, idx, true); if (setMiniPlayerVisible) setMiniPlayerVisible(true); }} className={`group grid grid-cols-[16px_48px_1fr_90px] items-center gap-4 px-2 py-2 rounded-md cursor-pointer transition duration-200 clear-bg-on-hover ${isCurrentSong ? "clear-bg-active text-white" : "text-gray-400"}`}>
                   
-                  {/* Properly toggles equalizer icon vs numbers */}
                   <div className="font-medium text-sm text-center">
                     {isCurrentSong && isPlaying ? (
                       <span className="text-[#1db954] animate-pulse"><svg className="w-4 h-4 mx-auto" fill="currentColor" viewBox="0 0 24 24"><path d="M7 19v-14h3v14h-3zm8 0V5h3v14h-3z" /></svg></span>
@@ -164,7 +166,6 @@ const AlbumPage = () => {
                   </div>
                   
                   <div className="flex justify-end items-center gap-3 text-sm text-gray-400">
-                    {/* Properly shows dynamic duration for the actively playing song */}
                     <span>{isCurrentSong ? formatTime(duration) : song.duration}</span>
                     <button onClick={(e) => { e.stopPropagation(); setSelectedSong(song); setIsModalOpen(true); }} className="hidden group-hover:block cursor-pointer hover:text-white">
                       <MoreVertical className="w-5 h-5" />

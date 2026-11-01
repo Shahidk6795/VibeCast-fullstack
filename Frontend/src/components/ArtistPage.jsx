@@ -81,12 +81,17 @@ const ArtistPage = () => {
         if (res.ok) {
           const apiResponse = await res.json();
           const songs = apiResponse.data?.songs || apiResponse.data?.results || apiResponse.data || [];
-          if (songs.length < 30) setHasMore(false); // API limits usually around 30-50
+          
+          // FIX 1: Only hide the "Load More" button if the API literally returns 0 songs!
+          if (songs.length === 0) setHasMore(false); 
           
           const uniqueSongs = [];
           const seenNames = new Set();
+          
           for (const song of songs) {
-            const cleanName = song.name.split(' (')[0].trim().toLowerCase();
+            // FIX 2: Stopped stripping out parenthesis so Remixes and extensions stay!
+            const cleanName = song.name.trim().toLowerCase(); 
+            
             if (!seenNames.has(cleanName)) {
               seenNames.add(cleanName);
               uniqueSongs.push({
@@ -126,7 +131,8 @@ const ArtistPage = () => {
             const data = await res.json();
             const rawAlbums = data.data?.albums || data.data?.results || data.data || [];
             
-            if (rawAlbums.length < 10) setHasMoreAlbums(false);
+            // FIX 3: Same logic for albums, only disable Load More if 0 are returned
+            if (rawAlbums.length === 0) setHasMoreAlbums(false);
 
             const formattedAlbums = rawAlbums.map(album => ({
               id: album.id,
@@ -244,7 +250,7 @@ const ArtistPage = () => {
               )}
               {hasMore && displaySongs.length > 0 && (
                 <div className="flex justify-center mt-8 mb-12">
-                  <button onClick={() => setPage(p => p + 1)} disabled={isLoadingMoreSongs} className="px-8 py-3 rounded-full font-bold text-white border border-gray-500 hover:border-white flex items-center gap-2">
+                  <button onClick={() => setPage(p => p + 1)} disabled={isLoadingMoreSongs} className="px-8 py-3 rounded-full font-bold text-white border border-gray-500 hover:border-white flex items-center gap-2 transition-all">
                     {isLoadingMoreSongs ? "Loading..." : "Load More Songs"}
                   </button>
                 </div>
@@ -273,7 +279,7 @@ const ArtistPage = () => {
               )}
               {hasMoreAlbums && artistAlbums.length > 0 && (
                 <div className="flex justify-center mt-8 mb-12">
-                  <button onClick={() => setAlbumPage(p => p + 1)} disabled={isLoadingMoreAlbums} className="px-8 py-3 rounded-full font-bold text-white border border-gray-500 hover:border-white flex items-center gap-2">
+                  <button onClick={() => setAlbumPage(p => p + 1)} disabled={isLoadingMoreAlbums} className="px-8 py-3 rounded-full font-bold text-white border border-gray-500 hover:border-white flex items-center gap-2 transition-all">
                     {isLoadingMoreAlbums ? "Loading..." : "Load More Albums"}
                   </button>
                 </div>
