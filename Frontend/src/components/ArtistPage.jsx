@@ -53,13 +53,15 @@ const ArtistPage = () => {
       else setIsLoadingMore(true);
 
       try {
-        const res = await fetch(`${API_URL}/api/search?query=${encodeURIComponent(decodedArtistName)}&limit=50&page=${page}`);
+        // Hit the new backend catalog route instead of generic search
+        const res = await fetch(`${API_URL}/api/artists/catalog?name=${encodeURIComponent(decodedArtistName)}&page=${page}`);
         
         if (res.ok) {
           const apiResponse = await res.json();
-          const songs = apiResponse.data?.results || [];
+          // The official artist endpoint puts the array inside .songs instead of .results
+          const songs = apiResponse.data?.songs || apiResponse.data?.results || apiResponse.data || [];
 
-          if (songs.length < 50) setHasMore(false);
+          if (songs.length === 0) setHasMore(false);
 
           const uniqueSongs = [];
           const seenNames = new Set();
