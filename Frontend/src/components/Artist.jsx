@@ -3,42 +3,46 @@ import { useNavigate } from "react-router-dom";
 import { Play, Search, X, Sparkles, Music2 } from "lucide-react";
 import { API_URL } from '../config.js';
 
-const starterArtists = [
-  { name: "Arijit Singh", genre: "Bollywood", image: "https://placehold.co/300x300/181818/1db954?text=Arijit+Singh" },
-  { name: "Shreya Ghoshal", genre: "Bollywood", image: "https://placehold.co/300x300/181818/1db954?text=Shreya+Ghoshal" },
-  { name: "A.R. Rahman", genre: "Indian", image: "https://placehold.co/300x300/181818/1db954?text=A.R.+Rahman" },
-  { name: "Pritam", genre: "Bollywood", image: "https://placehold.co/300x300/181818/1db954?text=Pritam" },
-  { name: "Atif Aslam", genre: "Pop", image: "https://placehold.co/300x300/181818/1db954?text=Atif+Aslam" },
-  { name: "Badshah", genre: "Punjabi", image: "https://placehold.co/300x300/181818/1db954?text=Badshah" },
-  { name: "Diljit Dosanjh", genre: "Punjabi", image: "https://placehold.co/300x300/181818/1db954?text=Diljit+Dosanjh" },
-  { name: "The Weeknd", genre: "Global Pop", image: "https://placehold.co/300x300/181818/1db954?text=The+Weeknd" },
-  { name: "Taylor Swift", genre: "Global Pop", image: "https://placehold.co/300x300/181818/1db954?text=Taylor+Swift" },
-  { name: "Darshan Raval", genre: "Pop", image: "https://placehold.co/300x300/181818/1db954?text=Darshan+Raval" },
-  { name: "Anirudh Ravichander", genre: "Tamil", image: "https://placehold.co/300x300/181818/1db954?text=Anirudh" },
-  { name: "Kishore Kumar", genre: "Classic", image: "https://placehold.co/300x300/181818/1db954?text=Kishore+Kumar" }
-];
-
-// Helper to safely extract image regardless of API format
 const getValidImage = (imageObj) => {
-  if (!imageObj) return 'https://placehold.co/300x300/181818/1db954?text=Artist';
+  if (!imageObj) return 'https://ik.imagekit.io/VibeCast/images/default-artist.jpg';
   if (typeof imageObj === 'string') return imageObj;
   if (Array.isArray(imageObj)) return imageObj[imageObj.length - 1]?.url || imageObj[imageObj.length - 1]?.link || imageObj[0]?.url;
-  return imageObj.url || imageObj.link || 'https://placehold.co/300x300/181818/1db954?text=Artist';
+  return imageObj.url || imageObj.link || 'https://ik.imagekit.io/VibeCast/images/default-artist.jpg';
 };
 
 const Artists = () => {
   const navigate = useNavigate();
   const [searchTerm, setSearchTerm] = useState("");
-  const [displayArtists, setDisplayArtists] = useState(starterArtists);
-  const [isLoading, setIsLoading] = useState(false);
+  const [displayArtists, setDisplayArtists] = useState([]);
+  const [isLoading, setIsLoading] = useState(true);
 
+  // Fetch dynamic defaults when search is empty
   useEffect(() => {
     if (!searchTerm.trim()) {
-      setDisplayArtists(starterArtists);
-      setIsLoading(false);
+      const fetchDefaults = async () => {
+        setIsLoading(true);
+        try {
+          const res = await fetch(`${API_URL}/api/artists/default`);
+          if (res.ok) {
+            const data = await res.json();
+            const formatted = data.data.map(artist => ({
+              name: artist.name,
+              image: getValidImage(artist.image),
+              genre: artist.genre
+            }));
+            setDisplayArtists(formatted);
+          }
+        } catch (error) {
+          console.error("Failed to load default artists:", error);
+        } finally {
+          setIsLoading(false);
+        }
+      };
+      fetchDefaults();
       return;
     }
 
+    // Live search trigger
     const delayDebounce = setTimeout(async () => {
       setIsLoading(true);
       try {
@@ -109,7 +113,7 @@ const Artists = () => {
         {isLoading ? (
           <div className="flex flex-col items-center justify-center py-20">
               <div className="w-12 h-12 border-4 border-pink-500 border-t-transparent rounded-full animate-spin"></div>
-              <p className="text-gray-400 mt-4 font-bold tracking-widest uppercase text-sm">Searching JioSaavn...</p>
+              <p className="text-gray-400 mt-4 font-bold tracking-widest uppercase text-sm">Loading Artists...</p>
           </div>
         ) : displayArtists.length > 0 ? (
           <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-6 sm:gap-8">
@@ -151,7 +155,7 @@ const Artists = () => {
         ) : (
           <div className="flex flex-col items-center justify-center py-20 text-gray-500">
               <Search className="w-16 h-16 mb-4 opacity-20" />
-              <p className="text-xl font-bold">No artists found on JioSaavn</p>
+              <p className="text-xl font-bold">No artists found</p>
           </div>
         )}
       </div>
