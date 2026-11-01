@@ -13,6 +13,7 @@ import playlistRoutes from './routes/playlistRoutes.js';
 import likesRoutes from './routes/likesRoutes.js';
 import moodsRoutes from './routes/moodsRoutes.js';
 import settingsRoutes from './routes/settingsRoutes.js';
+import albumRoutes from './routes/albumRoutes.js';
 
 dotenv.config();
 
@@ -73,6 +74,7 @@ app.use('/api/playlists', playlistRoutes);
 app.use('/api/likes', likesRoutes);
 app.use('/api/moods', moodsRoutes);
 app.use('/api/settings', settingsRoutes);
+app.use('/api/albums', albumRoutes);
 
 const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => console.log(`🚀 Server running on ${PORT}!`));
