@@ -40,13 +40,15 @@ const SearchResults = () => {
     setSearchTerm(getQuery());
   }, [location.search, getQuery]);
 
-  // Debounced API Search
+  // Debounced & Filtered API Search
   useEffect(() => {
     const q = searchTerm.trim();
     
-    if (!q) {
+    // Prevent 500 errors by waiting for at least 3 characters
+    if (q.length < 3) {
       setFilteredTracks([]);
       setFilteredArtists([]);
+      setIsSearching(false);
       return;
     }
 
@@ -54,28 +56,35 @@ const SearchResults = () => {
 
     const delayDebounceFn = setTimeout(async () => {
       try {
-        // Hit your new Render Node.js backend
         const res = await fetch(`${API_URL}/api/search?query=${encodeURIComponent(q)}`);
         
         if (res.ok) {
           const apiResponse = await res.json();
-          // The JioSaavn wrapper puts results inside data.results
           const songs = apiResponse.data?.results || [];
 
-          // Map JioSaavn's JSON keys to match what your PlayerContext expects
-          const mappedTracks = songs.map(song => ({
-            id: song.id,
-            title: song.name,
-            artist: song.primaryArtists,
-            // Grab the highest quality direct .mp4 link
-            audio_url: song.downloadUrl ? song.downloadUrl[song.downloadUrl.length - 1]?.link : '',
-            // Grab the highest quality album cover
-            cover_url: song.image ? song.image[song.image.length - 1]?.link : '',
-            duration: song.duration
-          }));
+          const uniqueSongs = [];
+          const seenNames = new Set();
 
-          setFilteredTracks(mappedTracks);
-          // Note: If you want artist profiles, you will need to add an /api/search/artists route to your backend later
+          for (const song of songs) {
+            // Clean name to accurately catch duplicates
+            const cleanName = song.name.split(' (')[0].trim().toLowerCase();
+
+            if (!seenNames.has(cleanName)) {
+              seenNames.add(cleanName);
+              
+              // Map using .url to fix the audio/image crashing bug
+              uniqueSongs.push({
+                id: song.id,
+                title: song.name.replace(/&quot;/g, '"'), 
+                artist: song.primaryArtists,
+                audio_url: song.downloadUrl ? song.downloadUrl[song.downloadUrl.length - 1]?.url : '',
+                cover_url: song.image ? song.image[song.image.length - 1]?.url : '',
+                duration: formatTime(song.duration) // Format the seconds into MM:SS
+              });
+            }
+          }
+
+          setFilteredTracks(uniqueSongs);
           setFilteredArtists([]); 
         }
       } catch (err) {
@@ -83,7 +92,7 @@ const SearchResults = () => {
       } finally {
         setIsSearching(false);
       }
-    }, 500); // Waits 500ms after the user stops typing before fetching
+    }, 600); 
 
     return () => clearTimeout(delayDebounceFn);
   }, [searchTerm]);
@@ -117,7 +126,7 @@ const SearchResults = () => {
           type="text"
           value={searchTerm}
           onChange={(e) => setSearchTerm(e.target.value)}
-          placeholder="Search for songs..."
+          placeholder="Search for songs (min 3 letters)..."
           className="w-full px-5 py-3 rounded-full bg-black/50 border border-pink-500/20 text-white placeholder-gray-400 text-center shadow-inner focus:outline-none focus:ring-2 focus:ring-pink-500 focus:border-transparent transition-all"
         />
         {isSearching && (
@@ -129,7 +138,7 @@ const SearchResults = () => {
 
       {filteredArtists.length === 0 && filteredTracks.length === 0 && !isSearching ? (
         <p className="text-gray-400 text-lg mt-20 animate-pulse">
-          {searchTerm ? "No results found 😔" : "Type to start listening 🎧"}
+          {searchTerm.length >= 3 ? "No results found 😔" : "Type at least 3 letters to search 🎧"}
         </p>
       ) : (
         <div className="w-full max-w-5xl flex flex-col gap-12">
