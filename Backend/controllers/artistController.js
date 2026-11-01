@@ -91,3 +91,19 @@ export const fetchArtistAlbums = async (req, res) => {
         res.status(500).json({ error: "Failed to fetch artist albums" });
     }
 };
+export const searchLiveArtists = async (req, res) => {
+    const { query } = req.query;
+    const SAAVN_API = process.env.SAAVN_API_URL; 
+    
+    try {
+        if (!query) return res.json({ data: { results: [] } });
+        
+        const response = await fetch(`${SAAVN_API}/search/artists?query=${encodeURIComponent(query)}`);
+        const data = await response.json();
+        
+        res.json(data);
+    } catch (error) {
+        console.error("Live Artist Search Error:", error);
+        res.status(500).json({ error: "Failed to search live artists" });
+    }
+};
