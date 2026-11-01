@@ -20,61 +20,75 @@ const ArtistPage = () => {
   const decodedArtistName = decodeURIComponent(artistName);
 
   const [dbArtistData, setDbArtistData] = useState(null);
+  const [activeTab, setActiveTab] = useState("songs");
+  
+  // Song States
   const [displaySongs, setDisplaySongs] = useState([]);
-  
-  // Tab & Albums State
-  const [activeTab, setActiveTab] = useState("songs"); // "songs" or "albums"
-  const [artistAlbums, setArtistAlbums] = useState([]);
-  const [isLoadingAlbums, setIsLoadingAlbums] = useState(false);
-  
-  // Pagination & Loading States
-  const [isLoading, setIsLoading] = useState(true);
-  const [isLoadingMore, setIsLoadingMore] = useState(false);
   const [page, setPage] = useState(1);
   const [hasMore, setHasMore] = useState(true);
+  const [isLoadingSongs, setIsLoadingSongs] = useState(true);
+  const [isLoadingMoreSongs, setIsLoadingMoreSongs] = useState(false);
+  
+  // Album States
+  const [artistAlbums, setArtistAlbums] = useState([]);
+  const [albumPage, setAlbumPage] = useState(1);
+  const [hasMoreAlbums, setHasMoreAlbums] = useState(true);
+  const [isLoadingAlbums, setIsLoadingAlbums] = useState(false);
+  const [isLoadingMoreAlbums, setIsLoadingMoreAlbums] = useState(false);
   
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [selectedSong, setSelectedSong] = useState(null);
   
-  const [themeDetails, setThemeDetails] = useState({
-    themeFrom: "#121212", 
-    themeAccent: "#1db954", 
-    genre: "Top Hits & Trending Melodies."
-  });
+  const [themeDetails, setThemeDetails] = useState({ themeFrom: "#121212", themeAccent: "#1db954", genre: "Top Hits & Trending Melodies." });
 
-  const {
-    playPlaylist, playPause, isPlaying, currentSongIndex,
-    playlist, duration, setMiniPlayerVisible, isShuffle, toggleShuffle
-  } = useContext(PlayerContext);
+  const { playPlaylist, playPause, isPlaying, currentSongIndex, playlist, duration, setMiniPlayerVisible, isShuffle, toggleShuffle } = useContext(PlayerContext);
+
+  useEffect(() => { window.scrollTo(0, 0); }, []);
+
+  // Fetch Artist Details
+  useEffect(() => {
+    const fetchArtistDetails = async () => {
+      try {
+        const res = await fetch(`${API_URL}/api/artists/name/${encodeURIComponent(decodedArtistName)}`);
+        if (res.ok) {
+          const data = await res.json();
+          setDbArtistData(data);
+          if (data.genre) setThemeDetails(prev => ({ ...prev, genre: data.genre }));
+        }
+      } catch (error) { console.error("Failed to fetch artist details:", error); }
+    };
+    fetchArtistDetails();
+  }, [decodedArtistName]);
+
+  const finalImage = location.state?.image || dbArtistData?.image_url || "https://ik.imagekit.io/VibeCast/images/default-artist.jpg";
 
   useEffect(() => {
-    window.scrollTo(0, 0);
-  }, []);
+    if (!finalImage) return;
+    const fac = new FastAverageColor();
+    fac.getColorAsync(finalImage, { algorithm: 'dominant' })
+      .then(color => setThemeDetails(prev => ({ ...prev, themeFrom: color.hex, themeAccent: color.isLight ? '#121212' : color.hex })))
+      .catch(e => console.error(e));
+    return () => fac.destroy();
+  }, [finalImage]);
 
-  // Fetch Live Tracks (Paginated)
+  // Fetch Songs (Paginated)
   useEffect(() => {
     const fetchDynamicTracks = async () => {
-      if (page === 1) setIsLoading(true);
-      else setIsLoadingMore(true);
-
+      if (page === 1) setIsLoadingSongs(true);
+      else setIsLoadingMoreSongs(true);
       try {
         const res = await fetch(`${API_URL}/api/artists/catalog?name=${encodeURIComponent(decodedArtistName)}&page=${page}`);
-        
         if (res.ok) {
           const apiResponse = await res.json();
           const songs = apiResponse.data?.songs || apiResponse.data?.results || apiResponse.data || [];
-
-          if (songs.length === 0) setHasMore(false);
-
+          if (songs.length < 30) setHasMore(false); // API limits usually around 30-50
+          
           const uniqueSongs = [];
           const seenNames = new Set();
-
           for (const song of songs) {
             const cleanName = song.name.split(' (')[0].trim().toLowerCase();
-
             if (!seenNames.has(cleanName)) {
               seenNames.add(cleanName);
-              
               uniqueSongs.push({
                 id: song.id,
                 name: song.name.replace(/&quot;/g, '"'), 
@@ -85,7 +99,6 @@ const ArtistPage = () => {
               });
             }
           }
-
           setDisplaySongs(prev => {
             if (page === 1) return uniqueSongs;
             const existingNames = new Set(prev.map(s => s.name.toLowerCase()));
@@ -93,28 +106,28 @@ const ArtistPage = () => {
             return [...prev, ...newSongs];
           });
         }
-      } catch (error) { 
-        console.error("Failed to fetch JioSaavn tracks:", error); 
-      } finally {
-        setIsLoading(false);
-        setIsLoadingMore(false);
-      }
+      } catch (error) { console.error("Failed to fetch JioSaavn tracks:", error); } 
+      finally { setIsLoadingSongs(false); setIsLoadingMoreSongs(false); }
     };
-
     fetchDynamicTracks();
   }, [decodedArtistName, page]);
 
-  // Fetch Albums when tab is switched
+  // Fetch Albums (Paginated)
   useEffect(() => {
-    if (activeTab === "albums" && artistAlbums.length === 0) {
+    if (activeTab === "albums") {
       const fetchAlbums = async () => {
-        setIsLoadingAlbums(true);
+        if (albumPage === 1 && artistAlbums.length === 0) setIsLoadingAlbums(true);
+        else if (albumPage > 1) setIsLoadingMoreAlbums(true);
+        else return;
+
         try {
-          const res = await fetch(`${API_URL}/api/artists/albums?name=${encodeURIComponent(decodedArtistName)}`);
+          const res = await fetch(`${API_URL}/api/artists/albums?name=${encodeURIComponent(decodedArtistName)}&page=${albumPage}`);
           if (res.ok) {
             const data = await res.json();
             const rawAlbums = data.data?.albums || data.data?.results || data.data || [];
             
+            if (rawAlbums.length < 10) setHasMoreAlbums(false);
+
             const formattedAlbums = rawAlbums.map(album => ({
               id: album.id,
               title: album.name || album.title,
@@ -122,62 +135,25 @@ const ArtistPage = () => {
               image: album.image ? album.image[album.image.length - 1]?.url : 'https://placehold.co/150x150/181818/ec4899?text=Album'
             }));
 
-            setArtistAlbums(formattedAlbums);
+            setArtistAlbums(prev => {
+              if (albumPage === 1) return formattedAlbums;
+              const existingIds = new Set(prev.map(a => a.id));
+              const newAlbums = formattedAlbums.filter(a => !existingIds.has(a.id));
+              return [...prev, ...newAlbums];
+            });
           }
-        } catch (err) {
-          console.error("Failed to load albums", err);
-        } finally {
-          setIsLoadingAlbums(false);
-        }
+        } catch (err) { console.error("Failed to load albums", err); } 
+        finally { setIsLoadingAlbums(false); setIsLoadingMoreAlbums(false); }
       };
       fetchAlbums();
     }
-  }, [activeTab, decodedArtistName, artistAlbums.length]);
-
-  // Fetch Artist Info
-  useEffect(() => {
-    const fetchArtistDetails = async () => {
-      try {
-        const res = await fetch(`${API_URL}/api/artists/name/${encodeURIComponent(decodedArtistName)}`);
-        if (res.ok) {
-          const data = await res.json();
-          setDbArtistData(data);
-          if (data.genre) {
-            setThemeDetails(prev => ({ ...prev, genre: data.genre }));
-          }
-        }
-      } catch (error) { console.error("Failed to fetch artist details:", error); }
-    };
-    
-    fetchArtistDetails();
-  }, [decodedArtistName]);
-
-  const finalQuote = dbArtistData?.quote || "Discover the top hits and latest drops. 🎵";
-  const finalImage = location.state?.image || dbArtistData?.image_url || "https://ik.imagekit.io/VibeCast/images/default-artist.jpg";
-
-  useEffect(() => {
-    if (!finalImage) return;
-    const fac = new FastAverageColor();
-    fac.getColorAsync(finalImage, { algorithm: 'dominant' })
-      .then(color => {
-        setThemeDetails(prev => ({
-          ...prev,
-          themeFrom: color.hex,
-          themeAccent: color.isLight ? '#121212' : color.hex 
-        }));
-      })
-      .catch(e => console.error("Color extraction failed.", e));
-    return () => fac.destroy();
-  }, [finalImage]);
+  }, [activeTab, decodedArtistName, albumPage, artistAlbums.length]);
 
   const handlePlayPause = useCallback(() => {
     if (!displaySongs.length) return;
     const isCurrentArtistPlaying = playlist && playlist.length > 0 && playlist.some(song => song.artist === decodedArtistName);
-    if (!isCurrentArtistPlaying) {
-      playPlaylist(displaySongs, 0);
-    } else {
-      playPause();
-    }
+    if (!isCurrentArtistPlaying) playPlaylist(displaySongs, 0);
+    else playPause();
     if (setMiniPlayerVisible) setMiniPlayerVisible(true);
   }, [displaySongs, playlist, decodedArtistName, playPlaylist, playPause, setMiniPlayerVisible]);
 
@@ -186,13 +162,8 @@ const ArtistPage = () => {
     if (setMiniPlayerVisible) setMiniPlayerVisible(true);
   }, [displaySongs, playPlaylist, setMiniPlayerVisible]);
 
-  const goBack = () => { navigate(-1); };
-
   return (
-    <div 
-      className="min-h-screen text-white flex flex-col items-center overflow-hidden bg-black select-none cursor-default transition-colors duration-700 pb-24"
-      style={{ "--theme-from": themeDetails.themeFrom, "--theme-accent": themeDetails.themeAccent }}
-    >
+    <div className="min-h-screen text-white flex flex-col items-center overflow-hidden bg-black select-none cursor-default transition-colors duration-700 pb-24" style={{ "--theme-from": themeDetails.themeFrom, "--theme-accent": themeDetails.themeAccent }}>
       <style>{`
         .artist-header { background-image: linear-gradient(to bottom, var(--theme-from), #121212); }
         .clear-bg-on-hover:hover { background-color: rgba(255, 255, 255, 0.1); }
@@ -201,24 +172,16 @@ const ArtistPage = () => {
       `}</style>
 
       <div className="w-full h-80 pt-16 relative artist-header z-10 shadow-lg transition-all duration-700">
-        <button onClick={goBack} className="absolute top-4 left-4 p-2 rounded-full bg-black/50 hover:bg-black/70 z-30 transition-transform hover:scale-110 cursor-pointer">
-          <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 19l-7-7 7-7"></path>
-          </svg>
+        <button onClick={() => navigate(-1)} className="absolute top-4 left-4 p-2 rounded-full bg-black/50 hover:bg-black/70 z-30 transition-transform hover:scale-110 cursor-pointer">
+          <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 19l-7-7 7-7"></path></svg>
         </button>
         <div className="flex items-end max-w-5xl mx-auto h-full px-6 pb-8">
-          <img
-            src={finalImage}
-            alt={decodedArtistName}
-            crossOrigin="anonymous"
-            className="w-56 h-56 shadow-[0_20px_50px_rgba(0,0,0,0.5)] object-cover rounded-full mr-6 border-4 border-white/10 pointer-events-none"
-          />
+          <img src={finalImage} alt={decodedArtistName} crossOrigin="anonymous" className="w-56 h-56 shadow-[0_20px_50px_rgba(0,0,0,0.5)] object-cover rounded-full mr-6 border-4 border-white/10 pointer-events-none" />
           <div>
             <p className="text-sm font-bold uppercase text-white/80 flex items-center gap-1">
               <span className="bg-[#1db954] text-black px-2 py-0.5 rounded text-[10px] font-extrabold">VERIFIED</span> Artist
             </p>
             <h1 className="text-7xl font-black mb-1 drop-shadow-lg capitalize">{decodedArtistName}</h1>
-            <p className="text-lg font-medium text-white/90 mt-2 italic">"{finalQuote}"</p>
             <p className="text-sm font-normal text-white/60 mt-1">{themeDetails.genre}</p>
           </div>
         </div>
@@ -227,7 +190,6 @@ const ArtistPage = () => {
       <div className="w-full min-h-screen relative z-10 pt-8 px-6 pb-24 bg-gradient-to-b from-[#121212] via-black to-black">
         <div className="max-w-5xl mx-auto relative z-20">
           
-          {/* Action Bar & Tabs */}
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-8 border-b border-gray-800 pb-4">
             <div className="flex items-center">
               <button onClick={handlePlayPause} className="w-16 h-16 rounded-full bg-[#1db954] hover:bg-[#1ed760] text-black flex items-center justify-center shadow-lg hover:scale-105 transition-all duration-300 cursor-pointer">
@@ -241,134 +203,86 @@ const ArtistPage = () => {
                 SHUFFLE
               </button>
             </div>
-
-            {/* Tab Switcher */}
             <div className="flex gap-6">
-              <button 
-                onClick={() => setActiveTab("songs")} 
-                className={`font-bold text-base transition-colors pb-1 border-b-2 ${activeTab === "songs" ? "text-white border-[#1db954]" : "text-gray-400 border-transparent hover:text-white"}`}
-              >
+              <button onClick={() => setActiveTab("songs")} className={`font-bold text-base transition-colors pb-1 border-b-2 ${activeTab === "songs" ? "text-white border-[#1db954]" : "text-gray-400 border-transparent hover:text-white"}`}>
                 Popular Songs
               </button>
-              <button 
-                onClick={() => setActiveTab("albums")} 
-                className={`font-bold text-base transition-colors pb-1 border-b-2 ${activeTab === "albums" ? "text-white border-[#1db954]" : "text-gray-400 border-transparent hover:text-white"}`}
-              >
+              <button onClick={() => setActiveTab("albums")} className={`font-bold text-base transition-colors pb-1 border-b-2 ${activeTab === "albums" ? "text-white border-[#1db954]" : "text-gray-400 border-transparent hover:text-white"}`}>
                 Albums & EPs
               </button>
             </div>
           </div>
 
-          {/* TAB 1: SONGS */}
           {activeTab === "songs" && (
             <>
               <div className="grid grid-cols-[16px_48px_1fr_90px] gap-4 py-2 border-b border-gray-700/50 text-gray-400 text-xs uppercase font-semibold mb-2 clear-bg-strip pointer-events-none">
                 <div>#</div><div></div><div>Title</div><div className="text-right">Time</div>
               </div>
-
-              {isLoading ? (
-                <div className="flex justify-center py-20">
-                  <div className="w-10 h-10 border-4 border-[#1db954] border-t-transparent rounded-full animate-spin"></div>
-                </div>
+              {isLoadingSongs ? (
+                <div className="flex justify-center py-20"><div className="w-10 h-10 border-4 border-[#1db954] border-t-transparent rounded-full animate-spin"></div></div>
               ) : (
                 displaySongs.map((song, idx) => {
                   const isCurrentSong = playlist.length > 0 && playlist[currentSongIndex]?.name === song.name;
-
                   return (
                     <div key={idx} onClick={() => selectSong(idx)} className={`group grid grid-cols-[16px_48px_1fr_90px] items-center gap-4 px-2 py-2 rounded-md cursor-default transition duration-200 clear-bg-on-hover ${isCurrentSong ? "clear-bg-active text-white" : "text-gray-400"}`}>
                       <div className="font-medium text-sm text-center">
-                        {isCurrentSong && isPlaying ? (
-                          <span className="text-[#1db954] animate-pulse"><svg className="w-4 h-4 mx-auto" fill="currentColor" viewBox="0 0 24 24"><path d="M7 19v-14h3v14h-3zm8 0V5h3v14h-3z" /></svg></span>
-                        ) : (
-                          <span className="group-hover:hidden">{idx + 1}</span>
-                        )}
+                        {isCurrentSong && isPlaying ? <span className="text-[#1db954] animate-pulse"><svg className="w-4 h-4 mx-auto" fill="currentColor" viewBox="0 0 24 24"><path d="M7 19v-14h3v14h-3zm8 0V5h3v14h-3z" /></svg></span> : <span className="group-hover:hidden">{idx + 1}</span>}
                         <svg className="w-4 h-4 hidden group-hover:block text-white" fill="currentColor" viewBox="0 0 24 24"><path d="M8 5v14l11-7z" /></svg>
                       </div>
-                      
                       <img src={song.image} alt={song.name} className="w-12 h-12 object-cover rounded shadow-md pointer-events-none" />
-                      
                       <div className="flex flex-col truncate">
                         <span className={`text-base font-semibold truncate ${isCurrentSong ? 'text-[#1db954]' : 'text-white'}`}>{song.name}</span>
                         <span className="text-sm font-light text-gray-400 group-hover:text-gray-300">{song.artist}</span>
                       </div>
-                      
                       <div className="flex justify-end items-center gap-3 text-sm text-gray-400">
                         <span>{isCurrentSong ? formatTime(duration) : song.duration}</span>
-                        <button 
-                          onClick={(e) => { e.stopPropagation(); setSelectedSong(song); setIsModalOpen(true); }}
-                          className="hidden group-hover:block cursor-pointer hover:text-white"
-                        >
-                          <MoreVertical className="w-5 h-5" />
-                        </button>
+                        <button onClick={(e) => { e.stopPropagation(); setSelectedSong(song); setIsModalOpen(true); }} className="hidden group-hover:block cursor-pointer hover:text-white"><MoreVertical className="w-5 h-5" /></button>
                       </div>
                     </div>
                   );
                 })
               )}
-              
-              {!isLoading && displaySongs.length === 0 && (
-                 <div className="text-center py-10"><p className="text-gray-400">No live tracks found for this artist.</p></div>
-              )}
-
               {hasMore && displaySongs.length > 0 && (
                 <div className="flex justify-center mt-8 mb-12">
-                  <button 
-                    onClick={() => setPage(prev => prev + 1)}
-                    disabled={isLoadingMore}
-                    className="px-8 py-3 rounded-full font-bold text-white bg-transparent border border-gray-500 hover:border-white hover:bg-white/10 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
-                  >
-                    {isLoadingMore ? (
-                      <>
-                        <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-                        Loading...
-                      </>
-                    ) : (
-                      "Load More Songs"
-                    )}
+                  <button onClick={() => setPage(p => p + 1)} disabled={isLoadingMoreSongs} className="px-8 py-3 rounded-full font-bold text-white border border-gray-500 hover:border-white flex items-center gap-2">
+                    {isLoadingMoreSongs ? "Loading..." : "Load More Songs"}
                   </button>
                 </div>
               )}
             </>
           )}
 
-          {/* TAB 2: ALBUMS & EPs */}
           {activeTab === "albums" && (
-            <div>
+            <>
               {isLoadingAlbums ? (
-                <div className="flex justify-center py-20">
-                  <div className="w-10 h-10 border-4 border-[#1db954] border-t-transparent rounded-full animate-spin"></div>
-                </div>
-              ) : artistAlbums.length > 0 ? (
+                <div className="flex justify-center py-20"><div className="w-10 h-10 border-4 border-[#1db954] border-t-transparent rounded-full animate-spin"></div></div>
+              ) : (
                 <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-6">
                   {artistAlbums.map((album) => (
-                    <div key={album.id} className="group bg-[#181818] hover:bg-[#282828] p-4 rounded-xl transition duration-300 flex flex-col gap-3">
+                    <div key={album.id} onClick={() => navigate(`/album/${album.id}`, { state: { image: album.image, title: album.title, year: album.year } })} className="group bg-[#181818] hover:bg-[#282828] p-4 rounded-xl transition duration-300 flex flex-col gap-3 cursor-pointer">
                       <div className="relative aspect-square rounded-md overflow-hidden shadow-lg">
                         <img src={album.image} alt={album.title} className="w-full h-full object-cover group-hover:scale-105 transition duration-500 pointer-events-none" />
                       </div>
                       <div className="flex flex-col">
-                        <h4 className="font-bold text-white text-base truncate">{album.title}</h4>
+                        <h4 className="font-bold text-white text-base truncate group-hover:text-[#1db954]">{album.title}</h4>
                         <p className="text-xs text-gray-400 mt-0.5">{album.year} • Album</p>
                       </div>
                     </div>
                   ))}
                 </div>
-              ) : (
-                <div className="text-center py-20 text-gray-500">
-                  <Disc className="w-16 h-16 mx-auto mb-4 opacity-20" />
-                  <p className="text-lg font-bold">No albums found</p>
+              )}
+              {hasMoreAlbums && artistAlbums.length > 0 && (
+                <div className="flex justify-center mt-8 mb-12">
+                  <button onClick={() => setAlbumPage(p => p + 1)} disabled={isLoadingMoreAlbums} className="px-8 py-3 rounded-full font-bold text-white border border-gray-500 hover:border-white flex items-center gap-2">
+                    {isLoadingMoreAlbums ? "Loading..." : "Load More Albums"}
+                  </button>
                 </div>
               )}
-            </div>
+            </>
           )}
-
         </div>
       </div>
-
-      <AddToPlaylistModal 
-        isOpen={isModalOpen}
-        onClose={() => setIsModalOpen(false)}
-        track={selectedSong}
-      />
+      <AddToPlaylistModal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} track={selectedSong} />
     </div>
   );
 };

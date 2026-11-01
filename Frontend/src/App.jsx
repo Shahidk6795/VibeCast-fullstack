@@ -17,6 +17,7 @@ import Profile from "./pages/Profile";
 import LikedSongsPage from "./components/LikedSongsPage";
 import CustomPlaylistPage from "./pages/CustomPlaylistPage";
 import MaintenanceGuard from './components/MaintenanceGuard';
+import AlbumPage from './components/AlbumPage';
 
 const PUBLISHABLE_KEY = import.meta.env.VITE_CLERK_PUBLISHABLE_KEY;
 
@@ -57,7 +58,7 @@ function MainApp() {
             <main className="pb-24 sm:pb-28">
               <Routes>
                 <Route path="/" element={<Home />} />
-                
+                <Route path="*" element={<Navigate to="/" replace />} />
                 <Route 
                   path="/admin" 
                   element={
@@ -89,6 +90,7 @@ function MainApp() {
                 <Route path="/artist/:artistName" element={<ArtistPage />} />
                 <Route path="/liked-songs" element={<LikedSongsPage />} />
                 <Route path="/playlist/:id" element={<CustomPlaylistPage />} />
+                <Route path="/album/:id" element={<AlbumPage />} />
 
               </Routes>
             </main>
