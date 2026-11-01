@@ -1,5 +1,6 @@
 import React, { useContext, useEffect, useState, useCallback } from "react";
-import { useNavigate, useParams, useLocation } from "react-router-dom";
+// FIX: Added useSearchParams to remember the active tab in the URL
+import { useNavigate, useParams, useLocation, useSearchParams } from "react-router-dom";
 import { PlayerContext } from "../context/PlayerContext";
 import { MoreVertical, Disc } from "lucide-react";
 import AddToPlaylistModal from "@/components/AddToPlaylistModal";
@@ -19,8 +20,11 @@ const ArtistPage = () => {
   const { artistName } = useParams();
   const decodedArtistName = decodeURIComponent(artistName);
 
+  // FIX: Read and Write the active tab to the URL (e.g. ?tab=albums)
+  const [searchParams, setSearchParams] = useSearchParams();
+  const activeTab = searchParams.get("tab") || "songs";
+
   const [dbArtistData, setDbArtistData] = useState(null);
-  const [activeTab, setActiveTab] = useState("songs");
   
   // Song States
   const [displaySongs, setDisplaySongs] = useState([]);
@@ -71,7 +75,7 @@ const ArtistPage = () => {
     return () => fac.destroy();
   }, [finalImage]);
 
-  // Fetch Songs (Paginated)
+  // Fetch Songs (Paginated - Now handles Top Hits vs Catalog automatically)
   useEffect(() => {
     const fetchDynamicTracks = async () => {
       if (page === 1) setIsLoadingSongs(true);
@@ -82,16 +86,13 @@ const ArtistPage = () => {
           const apiResponse = await res.json();
           const songs = apiResponse.data?.songs || apiResponse.data?.results || apiResponse.data || [];
           
-          // FIX 1: Only hide the "Load More" button if the API literally returns 0 songs!
           if (songs.length === 0) setHasMore(false); 
           
           const uniqueSongs = [];
           const seenNames = new Set();
           
           for (const song of songs) {
-            // FIX 2: Stopped stripping out parenthesis so Remixes and extensions stay!
             const cleanName = song.name.trim().toLowerCase(); 
-            
             if (!seenNames.has(cleanName)) {
               seenNames.add(cleanName);
               uniqueSongs.push({
@@ -131,7 +132,6 @@ const ArtistPage = () => {
             const data = await res.json();
             const rawAlbums = data.data?.albums || data.data?.results || data.data || [];
             
-            // FIX 3: Same logic for albums, only disable Load More if 0 are returned
             if (rawAlbums.length === 0) setHasMoreAlbums(false);
 
             const formattedAlbums = rawAlbums.map(album => ({
@@ -210,10 +210,11 @@ const ArtistPage = () => {
               </button>
             </div>
             <div className="flex gap-6">
-              <button onClick={() => setActiveTab("songs")} className={`font-bold text-base transition-colors pb-1 border-b-2 ${activeTab === "songs" ? "text-white border-[#1db954]" : "text-gray-400 border-transparent hover:text-white"}`}>
+              {/* FIX: Update URL instead of just local state */}
+              <button onClick={() => setSearchParams({ tab: "songs" }, { replace: true })} className={`font-bold text-base transition-colors pb-1 border-b-2 ${activeTab === "songs" ? "text-white border-[#1db954]" : "text-gray-400 border-transparent hover:text-white"}`}>
                 Popular Songs
               </button>
-              <button onClick={() => setActiveTab("albums")} className={`font-bold text-base transition-colors pb-1 border-b-2 ${activeTab === "albums" ? "text-white border-[#1db954]" : "text-gray-400 border-transparent hover:text-white"}`}>
+              <button onClick={() => setSearchParams({ tab: "albums" }, { replace: true })} className={`font-bold text-base transition-colors pb-1 border-b-2 ${activeTab === "albums" ? "text-white border-[#1db954]" : "text-gray-400 border-transparent hover:text-white"}`}>
                 Albums & EPs
               </button>
             </div>
