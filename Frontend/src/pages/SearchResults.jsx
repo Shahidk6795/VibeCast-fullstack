@@ -76,7 +76,7 @@ const SearchResults = () => {
               uniqueSongs.push({
                 id: song.id,
                 title: song.name.replace(/&quot;/g, '"'), 
-                artist: song.primaryArtists,
+                artist: song.artists?.primary?.map(a => a.name).join(', ') || "Unknown Artist",
                 audio_url: song.downloadUrl ? song.downloadUrl[song.downloadUrl.length - 1]?.url : '',
                 cover_url: song.image ? song.image[song.image.length - 1]?.url : '',
                 duration: formatTime(song.duration) // Format the seconds into MM:SS
