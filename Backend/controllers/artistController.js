@@ -107,3 +107,53 @@ export const searchLiveArtists = async (req, res) => {
         res.status(500).json({ error: "Failed to search live artists" });
     }
 };
+// NEW: Fetch dynamic default artists for the Discover page
+export const fetchDefaultArtists = async (req, res) => {
+    const SAAVN_API = process.env.SAAVN_API_URL; 
+    
+    try {
+        // Helper to safely fetch from JioSaavn
+        const fetchSafe = async (url) => {
+            try { 
+                const response = await fetch(url); 
+                return await response.json(); 
+            } catch (e) { return { data: { results: [] } }; }
+        };
+
+        // Fetch top artists across 3 major streaming categories simultaneously
+        const [hindiRes, englishRes, punjabiRes] = await Promise.all([
+            fetchSafe(`${SAAVN_API}/search/artists?query=hindi&limit=15`),
+            fetchSafe(`${SAAVN_API}/search/artists?query=english&limit=15`),
+            fetchSafe(`${SAAVN_API}/search/artists?query=punjabi&limit=15`)
+        ]);
+
+        const rawArtists = [
+            ...(hindiRes.data?.results || []),
+            ...(englishRes.data?.results || []),
+            ...(punjabiRes.data?.results || [])
+        ];
+
+        const uniqueArtists = [];
+        const seen = new Set();
+
+        for (const artist of rawArtists) {
+            if (!seen.has(artist.id) && artist.image) {
+                seen.add(artist.id);
+                uniqueArtists.push({
+                    id: artist.id,
+                    name: artist.title || artist.name,
+                    image: artist.image,
+                    genre: artist.description || artist.role || "Trending Artist"
+                });
+            }
+        }
+
+        // Shuffle the array so the Discover page looks different every time!
+        const shuffled = uniqueArtists.sort(() => 0.5 - Math.random()).slice(0, 18);
+        
+        res.json({ data: shuffled });
+    } catch (error) {
+        console.error("Default Artists Error:", error);
+        res.status(500).json({ error: "Failed to fetch default artists" });
+    }
+};

@@ -7,8 +7,10 @@ router.post('/', artistController.addArtist);
 router.get('/', artistController.fetchAllArtists);
 router.get('/catalog', artistController.fetchArtistCatalog); 
 router.get('/albums', artistController.fetchArtistAlbums); 
-
 router.get('/search', artistController.searchLiveArtists); 
+
+// NEW: Dynamic defaults route
+router.get('/default', artistController.fetchDefaultArtists); 
 
 router.get('/name/:artistName', artistController.fetchArtistByName);
 router.delete('/:id', artistController.deleteArtist);
