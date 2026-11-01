@@ -21,6 +21,7 @@ const ArtistPage = () => {
 
   const [dbArtistData, setDbArtistData] = useState(null);
   const [displaySongs, setDisplaySongs] = useState([]);
+  const [isLoading, setIsLoading] = useState(true);
   
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [selectedSong, setSelectedSong] = useState(null);
@@ -41,40 +42,49 @@ const ArtistPage = () => {
   }, []);
 
   useEffect(() => {
+    // 1. Fetch live JioSaavn tracks instead of local MySQL tracks
     const fetchDynamicTracks = async () => {
+      setIsLoading(true);
       try {
-        const res = await fetch(`${API_URL}/api/tracks/artist/${encodeURIComponent(decodedArtistName)}`);
+        // We use your existing Render search route, searching for the artist's name
+        const res = await fetch(`${API_URL}/api/search?query=${encodeURIComponent(decodedArtistName)}`);
+        
         if (res.ok) {
-          const tracks = await res.json();
-          if (Array.isArray(tracks)) {
-            const formattedTracks = tracks.map(track => {
-              let isRecent = true;
-              if (track.created_at) {
-                const uploadDate = new Date(track.created_at);
-                const diffDays = Math.ceil(Math.abs(new Date() - uploadDate) / (1000 * 60 * 60 * 24));
-                isRecent = diffDays <= 7;
-              }
-              return {
-                id: track.id, 
-                name: track.title, 
-                path: track.audio_url, 
-                image: track.cover_url,
-                duration: track.duration || "--:--", 
-                durationDisplay: isRecent ? "New 🟢" : "Added", 
-                artist: track.artist
-              };
-            });
+          const apiResponse = await res.json();
+          const songs = apiResponse.data?.results || [];
 
-            const uniqueTracks = formattedTracks.filter((track, index, self) =>
-              index === self.findIndex((t) => t.name === track.name)
-            );
+          // 2. Filter out duplicate compilation albums
+          const uniqueSongs = [];
+          const seenNames = new Set();
 
-            setDisplaySongs(uniqueTracks);
+          for (const song of songs) {
+            const cleanName = song.name.split(' (')[0].trim().toLowerCase();
+
+            if (!seenNames.has(cleanName)) {
+              seenNames.add(cleanName);
+              
+              // 3. Map JioSaavn properties (.url) to your UI's expected format
+              uniqueSongs.push({
+                id: song.id,
+                name: song.name.replace(/&quot;/g, '"'), 
+                artist: song.artists?.primary?.map(a => a.name).join(', ') || decodedArtistName,
+                path: song.downloadUrl ? song.downloadUrl[song.downloadUrl.length - 1]?.url : '',
+                image: song.image ? song.image[song.image.length - 1]?.url : '',
+                duration: formatTime(song.duration)
+              });
+            }
           }
+
+          setDisplaySongs(uniqueSongs);
         }
-      } catch (error) { console.error("Failed to fetch tracks:", error); }
+      } catch (error) { 
+        console.error("Failed to fetch JioSaavn tracks:", error); 
+      } finally {
+        setIsLoading(false);
+      }
     };
 
+    // Keep the artist details fetch intact (for quote, genre, fallback image)
     const fetchArtistDetails = async () => {
       try {
         const res = await fetch(`${API_URL}/api/artists/name/${encodeURIComponent(decodedArtistName)}`);
@@ -134,7 +144,7 @@ const ArtistPage = () => {
     if (setMiniPlayerVisible) setMiniPlayerVisible(true);
   }, [displaySongs, playPlaylist, setMiniPlayerVisible]);
 
-  const goBack = () => { navigate("/"); };
+  const goBack = () => { navigate(-1); }; // Fixed to navigate back properly
 
   useEffect(() => {
     const handleKeyDown = (event) => {
@@ -150,7 +160,7 @@ const ArtistPage = () => {
 
   return (
     <div 
-      className="min-h-screen text-white flex flex-col items-center overflow-hidden bg-black select-none cursor-default transition-colors duration-700"
+      className="min-h-screen text-white flex flex-col items-center overflow-hidden bg-black select-none cursor-default transition-colors duration-700 pb-24"
       style={{
         "--theme-from": themeDetails.themeFrom,
         "--theme-accent": themeDetails.themeAccent
@@ -186,7 +196,7 @@ const ArtistPage = () => {
                 "{finalQuote}"
             </p>
             <p className="text-sm font-normal text-white/60 mt-1">
-              {displaySongs.length} {displaySongs.length === 1 ? 'song' : 'songs'} • {themeDetails.genre}
+              {themeDetails.genre}
             </p>
           </div>
         </div>
@@ -212,52 +222,55 @@ const ArtistPage = () => {
             <div>#</div><div></div><div>Title</div><div className="text-right">Time</div>
           </div>
 
-          {displaySongs.map((song, idx) => {
-            const isCurrentSong = playlist.length > 0 && playlist[currentSongIndex]?.name === song.name;
+          {isLoading ? (
+            <div className="flex justify-center py-20">
+              <div className="w-10 h-10 border-4 border-[#1db954] border-t-transparent rounded-full animate-spin"></div>
+            </div>
+          ) : (
+            displaySongs.map((song, idx) => {
+              const isCurrentSong = playlist.length > 0 && playlist[currentSongIndex]?.name === song.name;
 
-            return (
-              <div key={idx} onClick={() => selectSong(idx)} className={`group grid grid-cols-[16px_48px_1fr_90px] items-center gap-4 px-2 py-2 rounded-md cursor-default transition duration-200 clear-bg-on-hover ${isCurrentSong ? "clear-bg-active text-white" : "text-gray-400"}`}>
-                <div className="font-medium text-sm text-center">
-                  {isCurrentSong && isPlaying ? (
-                    <span className="text-[#1db954] animate-pulse"><svg className="w-4 h-4 mx-auto" fill="currentColor" viewBox="0 0 24 24"><path d="M7 19v-14h3v14h-3zm8 0V5h3v14h-3z" /></svg></span>
-                  ) : (
-                    <span className="group-hover:hidden">{idx + 1}</span>
-                  )}
-                  <svg className="w-4 h-4 hidden group-hover:block text-white" fill="currentColor" viewBox="0 0 24 24"><path d="M8 5v14l11-7z" /></svg>
-                </div>
-                
-                <img src={song.image} alt={song.name} className="w-12 h-12 object-cover rounded shadow-md pointer-events-none" />
-                
-                <div className="flex flex-col truncate">
-                  <span className={`text-base font-semibold truncate ${isCurrentSong ? 'text-[#1db954]' : 'text-white'}`}>{song.name}</span>
-                  <span className="text-sm font-light text-gray-400 group-hover:text-gray-300">{song.artist}</span>
-                </div>
-                
-                <div className="flex justify-end items-center gap-3 text-sm text-gray-400">
-                  <span>
-                    {isCurrentSong
-                      ? formatTime(duration)
-                      : song.duration
-                    }
-                  </span>
+              return (
+                <div key={idx} onClick={() => selectSong(idx)} className={`group grid grid-cols-[16px_48px_1fr_90px] items-center gap-4 px-2 py-2 rounded-md cursor-default transition duration-200 clear-bg-on-hover ${isCurrentSong ? "clear-bg-active text-white" : "text-gray-400"}`}>
+                  <div className="font-medium text-sm text-center">
+                    {isCurrentSong && isPlaying ? (
+                      <span className="text-[#1db954] animate-pulse"><svg className="w-4 h-4 mx-auto" fill="currentColor" viewBox="0 0 24 24"><path d="M7 19v-14h3v14h-3zm8 0V5h3v14h-3z" /></svg></span>
+                    ) : (
+                      <span className="group-hover:hidden">{idx + 1}</span>
+                    )}
+                    <svg className="w-4 h-4 hidden group-hover:block text-white" fill="currentColor" viewBox="0 0 24 24"><path d="M8 5v14l11-7z" /></svg>
+                  </div>
+                  
+                  <img src={song.image} alt={song.name} className="w-12 h-12 object-cover rounded shadow-md pointer-events-none" />
+                  
+                  <div className="flex flex-col truncate">
+                    <span className={`text-base font-semibold truncate ${isCurrentSong ? 'text-[#1db954]' : 'text-white'}`}>{song.name}</span>
+                    <span className="text-sm font-light text-gray-400 group-hover:text-gray-300">{song.artist}</span>
+                  </div>
+                  
+                  <div className="flex justify-end items-center gap-3 text-sm text-gray-400">
+                    <span>
+                      {isCurrentSong ? formatTime(duration) : song.duration}
+                    </span>
 
-                  <button 
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setSelectedSong(song);
-                      setIsModalOpen(true);
-                    }}
-                    className="hidden group-hover:block cursor-pointer hover:text-white"
-                  >
-                    <MoreVertical className="w-5 h-5" />
-                  </button>
+                    <button 
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setSelectedSong(song);
+                        setIsModalOpen(true);
+                      }}
+                      className="hidden group-hover:block cursor-pointer hover:text-white"
+                    >
+                      <MoreVertical className="w-5 h-5" />
+                    </button>
+                  </div>
                 </div>
-              </div>
-            );
-          })}
+              );
+            })
+          )}
           
-          {displaySongs.length === 0 && (
-             <div className="text-center py-10"><p className="text-gray-400">No tracks found for this artist.</p></div>
+          {!isLoading && displaySongs.length === 0 && (
+             <div className="text-center py-10"><p className="text-gray-400">No live tracks found for this artist.</p></div>
           )}
         </div>
       </div>
