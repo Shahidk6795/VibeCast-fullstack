@@ -3,7 +3,6 @@ import { useNavigate } from "react-router-dom";
 import { Play, Search, X, Sparkles, Music2 } from "lucide-react";
 import { API_URL } from '../config.js';
 
-// 1. Curated Starter Pack (Replace these image URLs with your ImageKit links later!)
 const starterArtists = [
   { name: "Arijit Singh", genre: "Bollywood", image: "https://placehold.co/300x300/181818/1db954?text=Arijit+Singh" },
   { name: "Shreya Ghoshal", genre: "Bollywood", image: "https://placehold.co/300x300/181818/1db954?text=Shreya+Ghoshal" },
@@ -19,13 +18,20 @@ const starterArtists = [
   { name: "Kishore Kumar", genre: "Classic", image: "https://placehold.co/300x300/181818/1db954?text=Kishore+Kumar" }
 ];
 
+// Helper to safely extract image regardless of API format
+const getValidImage = (imageObj) => {
+  if (!imageObj) return 'https://placehold.co/300x300/181818/1db954?text=Artist';
+  if (typeof imageObj === 'string') return imageObj;
+  if (Array.isArray(imageObj)) return imageObj[imageObj.length - 1]?.url || imageObj[imageObj.length - 1]?.link || imageObj[0]?.url;
+  return imageObj.url || imageObj.link || 'https://placehold.co/300x300/181818/1db954?text=Artist';
+};
+
 const Artists = () => {
   const navigate = useNavigate();
   const [searchTerm, setSearchTerm] = useState("");
   const [displayArtists, setDisplayArtists] = useState(starterArtists);
   const [isLoading, setIsLoading] = useState(false);
 
-  // 2. Live JioSaavn Search Logic
   useEffect(() => {
     if (!searchTerm.trim()) {
       setDisplayArtists(starterArtists);
@@ -43,8 +49,8 @@ const Artists = () => {
           
           const formatted = apiArtists.map(artist => ({
             name: artist.title || artist.name,
-            image: artist.image ? artist.image[artist.image.length - 1]?.url : 'https://placehold.co/300x300/181818/1db954?text=Artist',
-            genre: artist.role || "Artist"
+            image: getValidImage(artist.image),
+            genre: artist.role || artist.description || "Artist"
           }));
           
           setDisplayArtists(formatted);
@@ -54,15 +60,13 @@ const Artists = () => {
       } finally {
         setIsLoading(false);
       }
-    }, 500); // 500ms debounce to prevent API spam
+    }, 500);
 
     return () => clearTimeout(delayDebounce);
   }, [searchTerm]);
 
   return (
     <div className="w-full min-h-screen text-white bg-black relative overflow-hidden">
-      
-      {/* Background Effects */}
       <div className="fixed inset-0 z-0 pointer-events-none">
         <div className="absolute inset-0 bg-[linear-gradient(to_right,#2a2a2a_1px,transparent_1px),linear-gradient(to_bottom,#2a2a2a_1px,transparent_1px)] bg-[size:4rem_4rem] [mask-image:radial-gradient(ellipse_60%_50%_at_50%_0%,#000_70%,transparent_110%)] top-1/2 transform perspective-500 rotateX(60deg) origin-top h-[150vh] opacity-30"></div>
         <div className="absolute top-0 left-0 w-full h-full overflow-hidden">
@@ -72,8 +76,6 @@ const Artists = () => {
       </div>
 
       <div className="relative z-10 max-w-7xl mx-auto px-6 pt-32 pb-32">
-        
-        {/* Header Section */}
         <div className="flex flex-col md:flex-row md:items-end justify-between gap-6 mb-12">
           <div>
             <h1 className="text-5xl md:text-6xl font-black tracking-tighter mb-2">
@@ -104,7 +106,6 @@ const Artists = () => {
           </div>
         </div>
 
-        {/* Artists Display */}
         {isLoading ? (
           <div className="flex flex-col items-center justify-center py-20">
               <div className="w-12 h-12 border-4 border-pink-500 border-t-transparent rounded-full animate-spin"></div>

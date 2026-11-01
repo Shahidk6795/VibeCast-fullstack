@@ -1,5 +1,4 @@
 import React, { useContext, useEffect, useState, useCallback } from "react";
-// FIX: Added useSearchParams to remember the active tab in the URL
 import { useNavigate, useParams, useLocation, useSearchParams } from "react-router-dom";
 import { PlayerContext } from "../context/PlayerContext";
 import { MoreVertical, Disc } from "lucide-react";
@@ -14,13 +13,19 @@ const formatTime = (sec) => {
   return `${minutes}:${seconds}`;
 };
 
+const getValidImage = (imageObj) => {
+  if (!imageObj) return 'https://placehold.co/300x300/181818/1db954?text=Artist';
+  if (typeof imageObj === 'string') return imageObj;
+  if (Array.isArray(imageObj)) return imageObj[imageObj.length - 1]?.url || imageObj[imageObj.length - 1]?.link || imageObj[0]?.url;
+  return imageObj.url || imageObj.link || 'https://placehold.co/300x300/181818/1db954?text=Artist';
+};
+
 const ArtistPage = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const { artistName } = useParams();
   const decodedArtistName = decodeURIComponent(artistName);
 
-  // FIX: Read and Write the active tab to the URL (e.g. ?tab=albums)
   const [searchParams, setSearchParams] = useSearchParams();
   const activeTab = searchParams.get("tab") || "songs";
 
@@ -49,7 +54,6 @@ const ArtistPage = () => {
 
   useEffect(() => { window.scrollTo(0, 0); }, []);
 
-  // Fetch Artist Details
   useEffect(() => {
     const fetchArtistDetails = async () => {
       try {
@@ -75,7 +79,7 @@ const ArtistPage = () => {
     return () => fac.destroy();
   }, [finalImage]);
 
-  // Fetch Songs (Paginated - Now handles Top Hits vs Catalog automatically)
+  // Fetch Songs (Authenticity Filter)
   useEffect(() => {
     const fetchDynamicTracks = async () => {
       if (page === 1) setIsLoadingSongs(true);
@@ -93,7 +97,12 @@ const ArtistPage = () => {
           
           for (const song of songs) {
             const cleanName = song.name.trim().toLowerCase(); 
-            if (!seenNames.has(cleanName)) {
+            const singerStr = (song.artists?.primary?.map(a => a.name).join(', ') || song.primaryArtists || song.singers || "").toLowerCase();
+            
+            const isFake = cleanName.includes("karaoke") || cleanName.includes("tribute") || cleanName.includes("cover");
+            const isAuthentic = singerStr === "" || singerStr.includes(decodedArtistName.toLowerCase());
+
+            if (!seenNames.has(cleanName) && !isFake && isAuthentic) {
               seenNames.add(cleanName);
               uniqueSongs.push({
                 id: song.id,
@@ -105,6 +114,7 @@ const ArtistPage = () => {
               });
             }
           }
+
           setDisplaySongs(prev => {
             if (page === 1) return uniqueSongs;
             const existingNames = new Set(prev.map(s => s.name.toLowerCase()));
@@ -118,7 +128,7 @@ const ArtistPage = () => {
     fetchDynamicTracks();
   }, [decodedArtistName, page]);
 
-  // Fetch Albums (Paginated)
+  // Fetch Albums (Authenticity Filter Added)
   useEffect(() => {
     if (activeTab === "albums") {
       const fetchAlbums = async () => {
@@ -134,17 +144,34 @@ const ArtistPage = () => {
             
             if (rawAlbums.length === 0) setHasMoreAlbums(false);
 
-            const formattedAlbums = rawAlbums.map(album => ({
-              id: album.id,
-              title: album.name || album.title,
-              year: album.year || album.releaseDate?.substring(0, 4) || "",
-              image: album.image ? album.image[album.image.length - 1]?.url : 'https://placehold.co/150x150/181818/ec4899?text=Album'
-            }));
+            const uniqueAlbums = [];
+            const seenAlbumNames = new Set();
+
+            for (const album of rawAlbums) {
+              const albumName = (album.name || album.title || "").trim();
+              const cleanAlbumName = albumName.toLowerCase();
+              
+              // Extract the primary artists attached to the album
+              const artistStr = (album.artists?.primary?.map(a => a.name).join(', ') || album.primaryArtists || "").toLowerCase();
+              
+              // STRICT FILTER: The artist must be explicitly listed as a primary album artist
+              const isAuthentic = artistStr === "" || artistStr.includes(decodedArtistName.toLowerCase());
+
+              if (!seenAlbumNames.has(cleanAlbumName) && isAuthentic) {
+                seenAlbumNames.add(cleanAlbumName);
+                uniqueAlbums.push({
+                  id: album.id,
+                  title: albumName,
+                  year: album.year || album.releaseDate?.substring(0, 4) || "",
+                  image: getValidImage(album.image)
+                });
+              }
+            }
 
             setArtistAlbums(prev => {
-              if (albumPage === 1) return formattedAlbums;
+              if (albumPage === 1) return uniqueAlbums;
               const existingIds = new Set(prev.map(a => a.id));
-              const newAlbums = formattedAlbums.filter(a => !existingIds.has(a.id));
+              const newAlbums = uniqueAlbums.filter(a => !existingIds.has(a.id));
               return [...prev, ...newAlbums];
             });
           }
@@ -210,7 +237,6 @@ const ArtistPage = () => {
               </button>
             </div>
             <div className="flex gap-6">
-              {/* FIX: Update URL instead of just local state */}
               <button onClick={() => setSearchParams({ tab: "songs" }, { replace: true })} className={`font-bold text-base transition-colors pb-1 border-b-2 ${activeTab === "songs" ? "text-white border-[#1db954]" : "text-gray-400 border-transparent hover:text-white"}`}>
                 Popular Songs
               </button>
