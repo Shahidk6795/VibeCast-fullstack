@@ -42,7 +42,14 @@ app.get('/api/search', async (req, res) => {
         return res.status(500).json({ error: "SAAVN_API_URL is missing in environment variables" });
     }
 
-    const response = await axios.get(`${apiUrl}/search/songs?query=${searchQuery}`);
+    // 1. Construct the exact target URL
+    const targetUrl = `${apiUrl}/search/songs?query=${searchQuery}`;
+    
+    // 2. Log it to the Render terminal so we can see what is broken
+    console.log("DEBUG - Trying to fetch from:", targetUrl);
+
+    // 3. Make the request
+    const response = await axios.get(targetUrl);
     res.json(response.data);
 
   } catch (error) {
