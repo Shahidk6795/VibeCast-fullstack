@@ -19,12 +19,9 @@ const SearchResults = () => {
   const getQuery = useCallback(() => new URLSearchParams(location.search).get("query") || "", [location.search]);
   
   const [searchTerm, setSearchTerm] = useState(getQuery());
-  
-  const [dbArtists, setDbArtists] = useState([]);
   const [filteredArtists, setFilteredArtists] = useState([]);
-  
-  const [dbTracks, setDbTracks] = useState([]);
   const [filteredTracks, setFilteredTracks] = useState([]);
+  const [isSearching, setIsSearching] = useState(false);
 
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [selectedSong, setSelectedSong] = useState(null);
@@ -38,57 +35,58 @@ const SearchResults = () => {
     setMiniPlayerVisible 
   } = useContext(PlayerContext);
 
-  const fetchArtistsAndTracks = useCallback(async () => {
-    try {
-      const [artistRes, trackRes] = await Promise.all([
-        fetch(`${API_URL}/api/artists`),
-        fetch(`${API_URL}/api/tracks`)
-      ]);
-      
-      if (artistRes.ok) {
-        const artistData = await artistRes.json();
-        setDbArtists(artistData);
-        setFilteredArtists(artistData.slice(0, 5));
-      }
-      
-      if (trackRes.ok) {
-        const trackData = await trackRes.json();
-        setDbTracks(trackData);
-        setFilteredTracks(trackData.slice(0, 10));
-      }
-    } catch {
-      console.error("Failed to load search data");
-    }
-  }, []);
-
-  useEffect(() => {
-    fetchArtistsAndTracks();
-  }, [fetchArtistsAndTracks]);
-
+  // Sync search term with URL if it changes
   useEffect(() => {
     setSearchTerm(getQuery());
   }, [location.search, getQuery]);
 
+  // Debounced API Search
   useEffect(() => {
-    const q = searchTerm.toLowerCase().trim();
+    const q = searchTerm.trim();
+    
     if (!q) {
-      setFilteredArtists(dbArtists.slice(0, 5));
-      setFilteredTracks(dbTracks.slice(0, 10));
-    } else {
-      const cleanQ = q.replace(/[^a-z0-9]/g, "");
-      
-      const matchedArtists = dbArtists.filter((a) =>
-        a.name.toLowerCase().replace(/[^a-z0-9]/g, "").includes(cleanQ)
-      );
-      setFilteredArtists(matchedArtists.slice(0, 10));
-      
-      const matchedTracks = dbTracks.filter((t) =>
-        t.title.toLowerCase().replace(/[^a-z0-9]/g, "").includes(cleanQ) || 
-        t.artist.toLowerCase().replace(/[^a-z0-9]/g, "").includes(cleanQ)
-      );
-      setFilteredTracks(matchedTracks.slice(0, 15));
+      setFilteredTracks([]);
+      setFilteredArtists([]);
+      return;
     }
-  }, [searchTerm, dbArtists, dbTracks]);
+
+    setIsSearching(true);
+
+    const delayDebounceFn = setTimeout(async () => {
+      try {
+        // Hit your new Render Node.js backend
+        const res = await fetch(`${API_URL}/api/search?query=${encodeURIComponent(q)}`);
+        
+        if (res.ok) {
+          const apiResponse = await res.json();
+          // The JioSaavn wrapper puts results inside data.results
+          const songs = apiResponse.data?.results || [];
+
+          // Map JioSaavn's JSON keys to match what your PlayerContext expects
+          const mappedTracks = songs.map(song => ({
+            id: song.id,
+            title: song.name,
+            artist: song.primaryArtists,
+            // Grab the highest quality direct .mp4 link
+            audio_url: song.downloadUrl ? song.downloadUrl[song.downloadUrl.length - 1]?.link : '',
+            // Grab the highest quality album cover
+            cover_url: song.image ? song.image[song.image.length - 1]?.link : '',
+            duration: song.duration
+          }));
+
+          setFilteredTracks(mappedTracks);
+          // Note: If you want artist profiles, you will need to add an /api/search/artists route to your backend later
+          setFilteredArtists([]); 
+        }
+      } catch (err) {
+        console.error("Failed to fetch from VibeCast API:", err);
+      } finally {
+        setIsSearching(false);
+      }
+    }, 500); // Waits 500ms after the user stops typing before fetching
+
+    return () => clearTimeout(delayDebounceFn);
+  }, [searchTerm]);
 
   const formattedSongs = useMemo(() => {
     return filteredTracks.map(track => ({
@@ -114,17 +112,24 @@ const SearchResults = () => {
         Explore VibeCast
       </h1>
 
-      <input
-        type="text"
-        value={searchTerm}
-        onChange={(e) => setSearchTerm(e.target.value)}
-        placeholder="Search for artists or songs..."
-        className="w-full max-w-md mb-10 px-5 py-3 rounded-full bg-black/50 border border-pink-500/20 text-white placeholder-gray-400 text-center shadow-inner focus:outline-none focus:ring-2 focus:ring-pink-500 focus:border-transparent transition-all"
-      />
+      <div className="w-full max-w-md mb-10 relative">
+        <input
+          type="text"
+          value={searchTerm}
+          onChange={(e) => setSearchTerm(e.target.value)}
+          placeholder="Search for songs..."
+          className="w-full px-5 py-3 rounded-full bg-black/50 border border-pink-500/20 text-white placeholder-gray-400 text-center shadow-inner focus:outline-none focus:ring-2 focus:ring-pink-500 focus:border-transparent transition-all"
+        />
+        {isSearching && (
+          <div className="absolute right-4 top-1/2 transform -translate-y-1/2">
+            <div className="w-4 h-4 border-2 border-pink-500 border-t-transparent rounded-full animate-spin"></div>
+          </div>
+        )}
+      </div>
 
-      {filteredArtists.length === 0 && filteredTracks.length === 0 ? (
+      {filteredArtists.length === 0 && filteredTracks.length === 0 && !isSearching ? (
         <p className="text-gray-400 text-lg mt-20 animate-pulse">
-          No results found 😔
+          {searchTerm ? "No results found 😔" : "Type to start listening 🎧"}
         </p>
       ) : (
         <div className="w-full max-w-5xl flex flex-col gap-12">
