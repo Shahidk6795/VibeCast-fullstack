@@ -45,3 +45,29 @@ export const deleteArtist = async (req, res) => {
         res.status(500).json({ error: 'Failed to delete artist' });
     }
 };
+
+// --- NEW LIVE API ROUTE ---
+export const fetchArtistCatalog = async (req, res) => {
+    const { name, page = 1 } = req.query;
+    const SAAVN_API = process.env.SAAVN_API_URL; 
+    
+    try {
+        // 1. Search for the artist to grab their official JioSaavn ID
+        const artistRes = await fetch(`${SAAVN_API}/search/artists?query=${encodeURIComponent(name)}`);
+        const artistJson = await artistRes.json();
+        const artistId = artistJson.data?.results?.[0]?.id;
+
+        if (!artistId) {
+            return res.json({ data: { songs: [] } });
+        }
+
+        // 2. Fetch their official catalog using their ID (returns 50 songs per page)
+        const songsRes = await fetch(`${SAAVN_API}/artists/${artistId}/songs?page=${page}`);
+        const songsJson = await songsRes.json();
+        
+        res.json(songsJson);
+    } catch (error) {
+        console.error("Catalog Error:", error);
+        res.status(500).json({ error: "Failed to fetch artist catalog" });
+    }
+};
