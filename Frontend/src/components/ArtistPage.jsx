@@ -21,7 +21,12 @@ const ArtistPage = () => {
 
   const [dbArtistData, setDbArtistData] = useState(null);
   const [displaySongs, setDisplaySongs] = useState([]);
+  
+  // Pagination and Loading States
   const [isLoading, setIsLoading] = useState(true);
+  const [isLoadingMore, setIsLoadingMore] = useState(false);
+  const [page, setPage] = useState(1);
+  const [hasMore, setHasMore] = useState(true);
   
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [selectedSong, setSelectedSong] = useState(null);
@@ -41,19 +46,21 @@ const ArtistPage = () => {
     window.scrollTo(0, 0);
   }, []);
 
+  // Fetch Live Tracks (Runs on mount and whenever 'page' changes)
   useEffect(() => {
-    // 1. Fetch live JioSaavn tracks instead of local MySQL tracks
     const fetchDynamicTracks = async () => {
-      setIsLoading(true);
+      if (page === 1) setIsLoading(true);
+      else setIsLoadingMore(true);
+
       try {
-        // We use your existing Render search route, searching for the artist's name
-        const res = await fetch(`${API_URL}/api/search?query=${encodeURIComponent(decodedArtistName)}`);
+        const res = await fetch(`${API_URL}/api/search?query=${encodeURIComponent(decodedArtistName)}&limit=50&page=${page}`);
         
         if (res.ok) {
           const apiResponse = await res.json();
           const songs = apiResponse.data?.results || [];
 
-          // 2. Filter out duplicate compilation albums
+          if (songs.length < 50) setHasMore(false);
+
           const uniqueSongs = [];
           const seenNames = new Set();
 
@@ -63,7 +70,6 @@ const ArtistPage = () => {
             if (!seenNames.has(cleanName)) {
               seenNames.add(cleanName);
               
-              // 3. Map JioSaavn properties (.url) to your UI's expected format
               uniqueSongs.push({
                 id: song.id,
                 name: song.name.replace(/&quot;/g, '"'), 
@@ -75,16 +81,26 @@ const ArtistPage = () => {
             }
           }
 
-          setDisplaySongs(uniqueSongs);
+          setDisplaySongs(prev => {
+            if (page === 1) return uniqueSongs;
+            const existingNames = new Set(prev.map(s => s.name.toLowerCase()));
+            const newSongs = uniqueSongs.filter(s => !existingNames.has(s.name.toLowerCase()));
+            return [...prev, ...newSongs];
+          });
         }
       } catch (error) { 
         console.error("Failed to fetch JioSaavn tracks:", error); 
       } finally {
         setIsLoading(false);
+        setIsLoadingMore(false);
       }
     };
 
-    // Keep the artist details fetch intact (for quote, genre, fallback image)
+    fetchDynamicTracks();
+  }, [decodedArtistName, page]);
+
+  // Fetch Artist Info (Runs only once on mount)
+  useEffect(() => {
     const fetchArtistDetails = async () => {
       try {
         const res = await fetch(`${API_URL}/api/artists/name/${encodeURIComponent(decodedArtistName)}`);
@@ -97,8 +113,7 @@ const ArtistPage = () => {
         }
       } catch (error) { console.error("Failed to fetch artist details:", error); }
     };
-
-    fetchDynamicTracks();
+    
     fetchArtistDetails();
   }, [decodedArtistName]);
 
@@ -144,7 +159,7 @@ const ArtistPage = () => {
     if (setMiniPlayerVisible) setMiniPlayerVisible(true);
   }, [displaySongs, playPlaylist, setMiniPlayerVisible]);
 
-  const goBack = () => { navigate(-1); }; // Fixed to navigate back properly
+  const goBack = () => { navigate(-1); };
 
   useEffect(() => {
     const handleKeyDown = (event) => {
@@ -272,6 +287,26 @@ const ArtistPage = () => {
           {!isLoading && displaySongs.length === 0 && (
              <div className="text-center py-10"><p className="text-gray-400">No live tracks found for this artist.</p></div>
           )}
+
+          {hasMore && displaySongs.length > 0 && (
+            <div className="flex justify-center mt-8 mb-12">
+              <button 
+                onClick={() => setPage(prev => prev + 1)}
+                disabled={isLoadingMore}
+                className="px-8 py-3 rounded-full font-bold text-white bg-transparent border border-gray-500 hover:border-white hover:bg-white/10 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+              >
+                {isLoadingMore ? (
+                  <>
+                    <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                    Loading...
+                  </>
+                ) : (
+                  "Load More Songs"
+                )}
+              </button>
+            </div>
+          )}
+
         </div>
       </div>
 
