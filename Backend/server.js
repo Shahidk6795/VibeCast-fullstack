@@ -5,6 +5,7 @@ import fs from 'fs';
 import { fileURLToPath } from 'url';
 import dotenv from 'dotenv';
 import pool from './db.js';
+import axios from 'axios';
 
 import artistRoutes from './routes/artistRoutes.js';
 import trackRoutes from './routes/trackRoutes.js';
@@ -28,7 +29,29 @@ if (!fs.existsSync('uploads')) {
 
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
-app.get('/api/health', async (req, res) => {
+app.get('/', (_req, res) => {
+  res.status(200).send("VibeCast API is awake and running!");
+});
+
+app.get('/api/search', async (req, res) => {
+  try {
+    const searchQuery = req.query.query; 
+    const apiUrl = process.env.SAAVN_API_URL; 
+
+    if (!apiUrl) {
+        return res.status(500).json({ error: "SAAVN_API_URL is missing in environment variables" });
+    }
+
+    const response = await axios.get(`${apiUrl}/search/songs?query=${searchQuery}`);
+    res.json(response.data);
+
+  } catch (error) {
+    console.error("Music Fetch Error:", error.message);
+    res.status(500).json({ error: "Failed to fetch songs from the music API" });
+  }
+});
+
+app.get('/api/health', async (_req, res) => {
   try {
     await pool.query('SELECT 1');
     res.json({ message: 'Connected to MySQL!' });
