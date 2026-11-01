@@ -46,7 +46,6 @@ const GlobalMiniPlayer = () => {
       return;
     }
 
-    // FIX: Prevents memory leaks if user skips songs faster than the server can respond
     let isMounted = true; 
 
     const checkLikeStatus = async () => {
@@ -112,10 +111,18 @@ const GlobalMiniPlayer = () => {
            alert("Server refused to Unlike. Check console!");
         }
       } else {
+        // Updated POST request sending full song data for the backend upsert
         const response = await fetch(`${API_URL}/api/likes`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ email, audio_url: currentAudioUrl }),
+          body: JSON.stringify({ 
+            email, 
+            audio_url: currentAudioUrl,
+            title: currentSong.title || currentSong.name,
+            artist: currentSong.artist,
+            cover_url: currentSong.cover_url || currentSong.image,
+            duration: currentSong.duration 
+          }),
         });
 
         if (response.ok) {
@@ -133,7 +140,7 @@ const GlobalMiniPlayer = () => {
     } finally {
       setIsLiking(false); 
     }
-  }, [user, isLiked, isLiking, currentAudioUrl]);
+  }, [user, isLiked, isLiking, currentAudioUrl, currentSong]); // Added currentSong as a dependency
 
   if (!playlist?.length || !currentSong) return null;
 
@@ -160,7 +167,8 @@ const GlobalMiniPlayer = () => {
         <div className="flex flex-col items-center w-full md:w-[40%] max-w-lg">
           
           <div className="md:hidden text-xs text-gray-300 mb-1 truncate w-64 text-center">
-            <span className="text-white font-bold">{currentSong.title || currentSong.name}</span> • {currentSong.artist}
+            <span className="text-white font-bold">{currentSong.title || currentSong.name}</span>
+            {" - "}{currentSong.artist}
           </div>
 
           <div className="flex items-center gap-6 mb-2">
