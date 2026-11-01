@@ -39,21 +39,36 @@ export const deleteArtist = async (req, res) => {
     }
 };
 
-// LIVE API ROUTE: Fetch Artist's Songs (Paginated)
+// HYBRID ROUTE: Top Hits on Page 1, Deep Catalog on Page 2+
 export const fetchArtistCatalog = async (req, res) => {
     const { name, page = 1 } = req.query;
     const SAAVN_API = process.env.SAAVN_API_URL; 
+    
     try {
-        const artistRes = await fetch(`${SAAVN_API}/search/artists?query=${encodeURIComponent(name)}`);
-        const artistJson = await artistRes.json();
-        const artistId = artistJson.data?.results?.[0]?.id;
+        if (parseInt(page) === 1) {
+            // PAGE 1: Use Search API to guarantee "All-Time Hits" & "Trending" are at the top
+            const searchRes = await fetch(`${SAAVN_API}/search/songs?query=${encodeURIComponent(name)}&limit=40`);
+            const searchJson = await searchRes.json();
+            return res.json(searchJson);
+        } else {
+            // PAGE 2+: Use Artist Catalog API to fetch the rest of their discography one by one
+            const artistRes = await fetch(`${SAAVN_API}/search/artists?query=${encodeURIComponent(name)}`);
+            const artistJson = await artistRes.json();
+            const artistId = artistJson.data?.results?.[0]?.id;
 
-        if (!artistId) return res.json({ data: { songs: [] } });
+            if (!artistId) {
+                return res.json({ data: { songs: [] } });
+            }
 
-        const songsRes = await fetch(`${SAAVN_API}/artists/${artistId}/songs?page=${page}`);
-        const songsJson = await songsRes.json();
-        res.json(songsJson);
+            // We subtract 1 so the catalog starts from its true beginning
+            const targetPage = parseInt(page) - 1;
+            const songsRes = await fetch(`${SAAVN_API}/artists/${artistId}/songs?page=${targetPage}`);
+            const songsJson = await songsRes.json();
+            
+            res.json(songsJson);
+        }
     } catch (error) {
+        console.error("Catalog Error:", error);
         res.status(500).json({ error: "Failed to fetch artist catalog" });
     }
 };
