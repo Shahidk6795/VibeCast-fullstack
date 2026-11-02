@@ -201,8 +201,6 @@ const ArtistPage = () => {
     }
   }, [activeTab, decodedArtistName, albumPage, artistAlbums.length]);
 
-
-  // Safely check if current playing artist matches the page
   const currentSong = playlist?.[currentSongIndex];
   const isCurrentArtistPlaying = Boolean(currentSong?.artist?.toLowerCase().includes(decodedArtistName.toLowerCase()));
 
@@ -217,8 +215,6 @@ const ArtistPage = () => {
     }
   }, [displaySongs, isCurrentArtistPlaying, playPlaylist, playPause, setMiniPlayerVisible]);
 
-
-  // FIX: Bulletproof Event Capturing Spacebar Listener
   const playPauseRef = useRef(handlePlayPause);
   
   useEffect(() => {
@@ -230,24 +226,16 @@ const ArtistPage = () => {
       if (e.target.tagName === "INPUT" || e.target.tagName === "TEXTAREA") return;
       
       if (e.code === "Space" || e.key === " ") {
-        if (e.repeat) return; // Prevent rapid-firing if they hold the spacebar down!
-        
+        if (e.repeat) return;
         e.preventDefault(); 
-        
-        // This stops the Global Mini Player from seeing the spacebar and conflicting with us
         e.stopImmediatePropagation(); 
-        
-        if (playPauseRef.current) {
-          playPauseRef.current();
-        }
+        if (playPauseRef.current) playPauseRef.current();
       }
     };
     
-    // { capture: true } ensures THIS component handles the spacebar BEFORE the rest of the app gets it
     window.addEventListener("keydown", handleKeyDown, { capture: true });
     return () => window.removeEventListener("keydown", handleKeyDown, { capture: true });
   }, []);
-
 
   const selectSong = useCallback((index) => {
     playPlaylist(displaySongs, index, true);
@@ -317,10 +305,24 @@ const ArtistPage = () => {
                   const isCurrentSong = currentSong?.id === song.id || currentSong?.name === song.name;
                   return (
                     <div key={idx} onClick={() => selectSong(idx)} className={`group grid grid-cols-[16px_48px_1fr_90px] items-center gap-4 px-2 py-2 rounded-md cursor-default transition duration-200 clear-bg-on-hover ${isCurrentSong ? "clear-bg-active text-white" : "text-gray-400"}`}>
-                      <div className="font-medium text-sm text-center">
-                        {isCurrentSong && isPlaying ? <span className="text-[#1db954] animate-pulse"><svg className="w-4 h-4 mx-auto" fill="currentColor" viewBox="0 0 24 24"><path d="M7 19v-14h3v14h-3zm8 0V5h3v14h-3z" /></svg></span> : <span className="group-hover:hidden">{idx + 1}</span>}
-                        <svg className="w-4 h-4 hidden group-hover:block text-white" fill="currentColor" viewBox="0 0 24 24"><path d="M8 5v14l11-7z" /></svg>
+                      
+                      {/* FIX: Replaced SVG with your Custom ImageKit Animated GIF! */}
+                      <div className="font-medium text-sm text-center flex justify-center items-center">
+                        {isCurrentSong && isPlaying ? (
+                          <img 
+                            src="https://ik.imagekit.io/vibecast/images/equaliser-animated-green.f93a2ef4.gif" 
+                            alt="Playing" 
+                            className="w-4 h-4" 
+                          />
+                        ) : (
+                          <span className="group-hover:hidden">{idx + 1}</span>
+                        )}
+                        {/* Show play icon on hover if NOT playing */}
+                        {!(isCurrentSong && isPlaying) && (
+                          <svg className="w-4 h-4 hidden group-hover:block text-white" fill="currentColor" viewBox="0 0 24 24"><path d="M8 5v14l11-7z" /></svg>
+                        )}
                       </div>
+                      
                       <img src={song.image} alt={song.name} className="w-12 h-12 object-cover rounded shadow-md pointer-events-none" />
                       <div className="flex flex-col truncate">
                         <span className={`text-base font-semibold truncate ${isCurrentSong ? 'text-[#1db954]' : 'text-white'}`}>{song.name}</span>
