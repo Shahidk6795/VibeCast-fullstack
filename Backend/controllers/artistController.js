@@ -180,3 +180,15 @@ export const fetchDefaultArtists = async (req, res) => {
         res.status(500).json({ error: "Failed to fetch default artists" });
     }
 };
+// NEW: Fetch Real-Time Homepage Modules (Trending, Charts, New Releases)
+export const fetchHomeModules = async (req, res) => {
+    const SAAVN_API = process.env.SAAVN_API_URL; 
+    try {
+        const response = await fetch(`${SAAVN_API}/modules?language=hindi,english`);
+        const data = await response.json();
+        res.json(data);
+    } catch (error) {
+        console.error("Home Modules Error:", error);
+        res.status(500).json({ error: "Failed to fetch home modules" });
+    }
+};
