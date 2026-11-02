@@ -1,10 +1,10 @@
-import React, { useState, useEffect, useContext, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useContext, useCallback} from 'react';
 import { useNavigate } from "react-router-dom";
 import { useUser } from "@clerk/clerk-react";
 import { PlayerContext } from "../context/PlayerContext";
 import "../index.css";
 import Hyperspeed from "@/components/Hyperspeed";
-import { Play, Dumbbell, Coffee, Heart, Sparkles, Sun, CloudSun, Moon, Clock, Flame, BarChart2, Radio } from "lucide-react";
+import { Play, Dumbbell, Coffee, Heart, Sparkles, Sun, CloudSun, Moon, Clock, Flame, BarChart2, Radio, TrendingUp } from "lucide-react";
 import LikedSongsCard from "@/components/LikedSongsCard";
 import PlaylistManager from "@/components/PlaylistManager";
 import { API_URL } from '../config.js';
@@ -29,17 +29,10 @@ const genreAmbience = {
   "Lo-Fi": "from-indigo-900/40 via-black to-black"
 };
 
-const topTierArtists = [
-  { name: "Arijit Singh", image: "https://c.saavncdn.com/artists/Arijit_Singh_002_20230323062147_500x500.jpg" },
-  { name: "The Weeknd", image: "https://c.saavncdn.com/artists/The_Weeknd_005_20230812083540_500x500.jpg" },
-  { name: "Taylor Swift", image: "https://c.saavncdn.com/artists/Taylor_Swift_005_20240419133444_500x500.jpg" },
-  { name: "Diljit Dosanjh", image: "https://c.saavncdn.com/artists/Diljit_Dosanjh_004_20231025073043_500x500.jpg" },
-  { name: "Drake", image: "https://c.saavncdn.com/artists/Drake_500x500.jpg" },
-  { name: "Shreya Ghoshal", image: "https://c.saavncdn.com/artists/Shreya_Ghoshal_002_20240909062325_500x500.jpg" },
-  { name: "Badshah", image: "https://c.saavncdn.com/artists/Badshah_005_20230608084021_500x500.jpg" },
-  { name: "Travis Scott", image: "https://c.saavncdn.com/artists/Travis_Scott_500x500.jpg" },
-  { name: "Pritam", image: "https://c.saavncdn.com/artists/Pritam_002_20230228082956_500x500.jpg" },
-  { name: "Dua Lipa", image: "https://c.saavncdn.com/artists/Dua_Lipa_005_20231108083832_500x500.jpg" }
+// FIX 1: We only hardcode names now. The app will fetch their LIVE images automatically!
+const vipArtistNames = [
+  "Arijit Singh", "The Weeknd", "Taylor Swift", "Diljit Dosanjh", 
+  "Drake", "Shreya Ghoshal", "Badshah", "Travis Scott", "Pritam", "Dua Lipa"
 ];
 
 const getValidImage = (imageObj) => {
@@ -59,18 +52,29 @@ const getValidAudio = (audioObj) => {
   return audioObj.url || audioObj.link || '';
 };
 
+const isNewRelease = (dateString) => {
+  if (!dateString) return false;
+  const trackDate = new Date(dateString);
+  if (isNaN(trackDate.getTime())) return false;
+  const diffDays = Math.ceil(Math.abs(new Date() - trackDate) / (1000 * 60 * 60 * 24));
+  return diffDays <= 30;
+};
+
 const Home = () => {
+  const [allTracks, setAllTracks] = useState([]);
+  const [dbTracks, setDbTracks] = useState([]);
+  const [homeArtists, setHomeArtists] = useState([]); 
+  
   const [activeGenre, setActiveGenre] = useState("All");
   const [recentlyPlayed, setRecentlyPlayed] = useState([]);
+  
   const [trendingSongs, setTrendingSongs] = useState([]);
   const [topCharts, setTopCharts] = useState([]);
   const [newReleases, setNewReleases] = useState([]);
 
   const { user } = useUser();
   const navigate = useNavigate();
-  
-  // Cleaned up unused destructured variables here!
-  const { playPlaylist } = useContext(PlayerContext) || {};
+  const { playPlaylist, currentTrack, isPlaying } = useContext(PlayerContext) || {};
 
   useEffect(() => {
     const savedRecents = localStorage.getItem('vibecast_recently_played');
@@ -102,16 +106,61 @@ const Home = () => {
   const greeting = getGreetingData();
   const GreetingIcon = greeting.icon;
 
+  const fetchTracks = useCallback(async () => {
+    try {
+      const response = await fetch(`${API_URL}/api/tracks`);
+      if (response.ok) {
+        const data = await response.json();
+        const shuffled = data.sort(() => 0.5 - Math.random());
+        setAllTracks(shuffled);
+        setDbTracks(shuffled);
+      }
+    } catch (error) {
+      console.error('Error fetching tracks:', error);
+    }
+  }, []);
+
+  // FIX 1: Fetch Live Avatars for the VIP Artists so they match perfectly!
+  const fetchLiveVIPArtists = useCallback(async () => {
+    try {
+      const promises = vipArtistNames.map(name => 
+        fetch(`${API_URL}/api/artists/search?query=${encodeURIComponent(name)}`).then(res => res.json())
+      );
+      const results = await Promise.all(promises);
+      
+      const liveArtists = results.map((res, idx) => {
+        const artistObj = res.data?.results?.[0];
+        return {
+          name: artistObj?.title || artistObj?.name || vipArtistNames[idx],
+          image: getValidImage(artistObj?.image)
+        };
+      });
+
+      setHomeArtists(liveArtists.sort(() => 0.5 - Math.random()));
+    } catch (error) {
+      console.error("Error fetching live VIP artists:", error);
+    }
+  }, []);
+
+  // FIX 2: Ultra-forgiving JSON parsing for Home Modules
   const fetchHomeModules = useCallback(async () => {
     try {
       const res = await fetch(`${API_URL}/api/artists/modules`);
       if (res.ok) {
         const data = await res.json();
-        if (data.data) {
-          setTrendingSongs(data.data.trending?.songs || []);
-          setTopCharts(data.data.charts || []);
-          setNewReleases(data.data.albums || []);
-        }
+        
+        // This handles standard APIs and Sumit Kolhe API wrappers
+        const payload = data.data || data; 
+        
+        const trending = payload.trending?.songs || payload.trending || [];
+        const charts = payload.charts || payload.top_charts || [];
+        const releases = payload.albums || payload.new_releases || [];
+        
+        setTrendingSongs(Array.isArray(trending) ? trending : []);
+        setTopCharts(Array.isArray(charts) ? charts : []);
+        setNewReleases(Array.isArray(releases) ? releases : []);
+      } else {
+        console.warn("Backend /modules returned an error. Did you deploy to Render?");
       }
     } catch (error) {
       console.error('Error fetching home modules:', error);
@@ -119,21 +168,28 @@ const Home = () => {
   }, []);
 
   useEffect(() => {
+    fetchTracks();
+    fetchLiveVIPArtists();
     fetchHomeModules();
-  }, [fetchHomeModules]);
+  }, [fetchTracks, fetchLiveVIPArtists, fetchHomeModules]);
 
   const handleArtistClick = useCallback((artist) => {
     navigate(`/artist/${encodeURIComponent(artist.name)}`, { state: { image: artist.image } }); 
   }, [navigate]);
 
-  // Stripped out the heavy array filtering, keeping only the ambient background change!
   const handleGenreClick = (genre) => {
     setActiveGenre(genre);
+    if (genre === "All") {
+      setDbTracks([...allTracks].sort(() => 0.5 - Math.random()));
+    } else {
+      const filteredTracks = allTracks.filter(
+        track => track.genre && track.genre.toLowerCase() === genre.toLowerCase()
+      );
+      setDbTracks(filteredTracks.length > 0 ? filteredTracks : [...allTracks].sort(() => 0.5 - Math.random()));
+    }
   };
 
-  const heroArtist = useMemo(() => {
-    return [...topTierArtists].sort(() => 0.5 - Math.random())[0];
-  }, []);
+  const heroArtist = homeArtists.length > 0 ? homeArtists[0] : null;
 
   return (
     <div className="relative w-full min-h-screen text-white overflow-x-hidden bg-black transition-colors duration-700">
@@ -196,6 +252,7 @@ const Home = () => {
           </section>
         )}
 
+        {/* LIVE VIP HERO ARTIST */}
         {heroArtist && (
           <section className="mb-14 relative rounded-3xl overflow-hidden h-64 md:h-80 group cursor-pointer shadow-2xl border border-white/10" onClick={() => handleArtistClick(heroArtist)}>
             <div className="absolute inset-0 bg-black">
@@ -218,6 +275,71 @@ const Home = () => {
           </section>
         )}
 
+        {/* TOP 5 TRACKS WITH GIF */}
+        {dbTracks.length > 0 && (
+          <section className="mb-14">
+            <h2 className="text-2xl font-bold mb-5 text-white flex items-center gap-2">
+              <TrendingUp className="w-6 h-6 text-pink-500" />
+              VibeCast Top 5
+            </h2>
+            <div className="flex gap-4 overflow-x-auto pb-4 scrollbar-hide snap-x">
+              {dbTracks.slice(0, 5).map((track, idx) => {
+                const isCurrentlyPlaying = currentTrack?.name === track.title && isPlaying;
+                const formatted = { name: track.title, artist: track.artist, path: getValidAudio(track.audio_url), image: getValidImage(track.cover_url) };
+                
+                return (
+                  <div
+                    key={track.id || idx}
+                    onClick={() => {
+                      playPlaylist?.([formatted], 0);
+                      trackPlayed(formatted);
+                    }}
+                    className="snap-start relative group flex items-center gap-4 p-3 rounded-2xl bg-white/5 hover:bg-white/10 border border-white/5 hover:border-white/20 transition-all duration-300 cursor-pointer backdrop-blur-md shadow-lg flex-shrink-0 w-[260px] sm:w-[320px] hover:-translate-y-1"
+                  >
+                    <div className="absolute -left-1 top-1/2 -translate-y-1/2 z-0 pointer-events-none">
+                      {isCurrentlyPlaying ? (
+                        <div className="flex items-center h-8 pl-3 opacity-90">
+                          <img 
+                            src="https://ik.imagekit.io/vibecast/images/equaliser-animated-green.f93a2ef4.gif" 
+                            alt="Playing" 
+                            className="w-5 h-5" 
+                          />
+                        </div>
+                      ) : (
+                        <span className="text-6xl font-black text-white/5 group-hover:text-[#1db954]/10 transition-colors">
+                          {idx + 1}
+                        </span>
+                      )}
+                    </div>
+
+                    <div className="relative w-14 h-14 sm:w-16 sm:h-16 rounded-xl overflow-hidden shadow-md bg-black z-10 flex-shrink-0 ml-4">
+                      <img src={formatted.image} alt={track.title} className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110" />
+                      
+                      {isNewRelease(track.created_at) && (
+                        <span className="absolute top-1 left-1 bg-gradient-to-r from-red-600 to-pink-600 text-white text-[9px] font-black px-1.5 py-0.5 rounded-md shadow-md uppercase tracking-wider z-20 flex items-center gap-0.5">
+                          <Flame className="w-2.5 h-2.5 fill-white" /> NEW
+                        </span>
+                      )}
+
+                      <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity duration-300">
+                        <Play className="w-6 h-6 text-white fill-white ml-1" />
+                      </div>
+                    </div>
+
+                    <div className="flex-1 min-w-0 z-10 py-1">
+                      <p className={`font-bold text-sm sm:text-base truncate transition-colors ${isCurrentlyPlaying ? "text-[#1db954]" : "text-white group-hover:text-[#1db954]"}`}>
+                        {track.title}
+                      </p>
+                      <p className="text-gray-400 text-xs sm:text-sm truncate mt-0.5">{track.artist}</p>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </section>
+        )}
+
+        {/* JIOSAAVN TRENDING SONGS */}
         {trendingSongs.length > 0 && (
           <section className="mb-14">
             <h2 className="text-2xl font-bold mb-5 text-white flex items-center gap-2">
@@ -228,7 +350,7 @@ const Home = () => {
               {trendingSongs.map((song, idx) => {
                 const formatted = { 
                   name: song.name?.replace(/&quot;/g, '"'), 
-                  artist: song.primaryArtists || "Unknown", 
+                  artist: song.primaryArtists || song.singers || "Unknown", 
                   path: getValidAudio(song.downloadUrl || song.url), 
                   image: getValidImage(song.image) 
                 };
@@ -260,6 +382,7 @@ const Home = () => {
           </section>
         )}
 
+        {/* JIOSAAVN NEW RELEASES */}
         {newReleases.length > 0 && (
           <section className="mb-14">
             <h2 className="text-2xl font-bold mb-5 text-white flex items-center gap-2">
@@ -286,6 +409,7 @@ const Home = () => {
           </section>
         )}
 
+        {/* JIOSAAVN TOP CHARTS */}
         {topCharts.length > 0 && (
           <section className="mb-14">
             <h2 className="text-2xl font-bold mb-5 text-white flex items-center gap-2">
@@ -345,31 +469,34 @@ const Home = () => {
           </div>
         </section>
 
-        <section className="mb-12 overflow-hidden relative">
-          <h2 className="text-2xl font-bold mb-5 hover:underline text-[#1db954] transition-colors duration-300">
-            Trending Artists
-          </h2>
-          <div className="ticker-wrapper relative overflow-hidden group mask-gradient">
-            <div className="ticker-content flex space-x-6 animate-ticker">
-              {topTierArtists.concat(topTierArtists).map((artist, idx) => (
-                <div key={idx} onClick={() => handleArtistClick(artist)} className="group/card relative flex flex-col p-3 sm:p-4 w-32 sm:w-44 rounded-xl shadow-2xl border border-white/5 hover:border-[#1db954] bg-white/5 hover:bg-white/10 flex-shrink-0 cursor-pointer transition-all duration-300 hover:-translate-y-1 backdrop-blur-sm">
-                  <div className="relative w-full aspect-square mb-3 shadow-lg rounded-full overflow-hidden">
-                    <img src={artist.image} alt={artist.name} loading="lazy" className="w-full h-full object-cover transition-transform duration-500 group-hover/card:scale-110" />
-                    <div className="absolute inset-0 bg-black/50 opacity-0 group-hover/card:opacity-100 transition-opacity duration-300 flex items-center justify-center">
-                      <div className="w-10 h-10 sm:w-12 sm:h-12 bg-[#1db954] rounded-full flex items-center justify-center shadow-lg hover:scale-110 transition-transform translate-y-2 group-hover/card:translate-y-0 duration-300">
-                        <Play className="w-5 h-5 sm:w-6 sm:h-6 text-black fill-current ml-1" />
+        {/* LIVE VIP ARTIST TICKER */}
+        {homeArtists.length > 0 && (
+          <section className="mb-12 overflow-hidden relative">
+            <h2 className="text-2xl font-bold mb-5 hover:underline text-[#1db954] transition-colors duration-300">
+              Trending Artists
+            </h2>
+            <div className="ticker-wrapper relative overflow-hidden group mask-gradient">
+              <div className="ticker-content flex space-x-6 animate-ticker">
+                {homeArtists.concat(homeArtists).map((artist, idx) => (
+                  <div key={idx} onClick={() => handleArtistClick(artist)} className="group/card relative flex flex-col p-3 sm:p-4 w-32 sm:w-44 rounded-xl shadow-2xl border border-white/5 hover:border-[#1db954] bg-white/5 hover:bg-white/10 flex-shrink-0 cursor-pointer transition-all duration-300 hover:-translate-y-1 backdrop-blur-sm">
+                    <div className="relative w-full aspect-square mb-3 shadow-lg rounded-full overflow-hidden">
+                      <img src={artist.image} alt={artist.name} loading="lazy" className="w-full h-full object-cover transition-transform duration-500 group-hover/card:scale-110" />
+                      <div className="absolute inset-0 bg-black/50 opacity-0 group-hover/card:opacity-100 transition-opacity duration-300 flex items-center justify-center">
+                        <div className="w-10 h-10 sm:w-12 sm:h-12 bg-[#1db954] rounded-full flex items-center justify-center shadow-lg hover:scale-110 transition-transform translate-y-2 group-hover/card:translate-y-0 duration-300">
+                          <Play className="w-5 h-5 sm:w-6 sm:h-6 text-black fill-current ml-1" />
+                        </div>
                       </div>
                     </div>
+                    <div className="text-center z-10">
+                      <p className="text-sm sm:text-base font-bold text-white truncate group-hover/card:text-[#1db954] transition-colors">{artist.name}</p>
+                      <p className="text-xs sm:text-sm text-gray-400 truncate mt-1">Artist</p>
+                    </div>
                   </div>
-                  <div className="text-center z-10">
-                    <p className="text-sm sm:text-base font-bold text-white truncate group-hover/card:text-[#1db954] transition-colors">{artist.name}</p>
-                    <p className="text-xs sm:text-sm text-gray-400 truncate mt-1">Artist</p>
-                  </div>
-                </div>
-              ))}
+                ))}
+              </div>
             </div>
-          </div>
-        </section>
+          </section>
+        )}
 
         <div className="h-20"></div>
       </div>
