@@ -180,12 +180,35 @@ export const fetchDefaultArtists = async (req, res) => {
         res.status(500).json({ error: "Failed to fetch default artists" });
     }
 };
-// NEW: Fetch Real-Time Homepage Modules (Trending, Charts, New Releases)
+// NEW: Indestructible Home Modules Fetcher (With Fallback Generation)
 export const fetchHomeModules = async (req, res) => {
     const SAAVN_API = process.env.SAAVN_API_URL; 
     try {
+        // 1. Try the standard modules route first
         const response = await fetch(`${SAAVN_API}/modules?language=hindi,english`);
         const data = await response.json();
+        
+        // 2. If the API wrapper says "route not found" (like saavn.dev), we generate our own!
+        if (data.success === false || data.message?.includes('not found')) {
+            console.log("Modules route missing on this API wrapper. Generating fallback modules...");
+            
+            // Fire 3 simultaneous searches to construct the homepage feeds
+            const [trendingRes, releasesRes, chartsRes] = await Promise.all([
+                fetch(`${SAAVN_API}/search/songs?query=trending bollywood&limit=12`).then(r => r.json()),
+                fetch(`${SAAVN_API}/search/albums?query=new release&limit=12`).then(r => r.json()),
+                fetch(`${SAAVN_API}/search/playlists?query=top charts india&limit=12`).then(r => r.json())
+            ]);
+
+            return res.json({
+                data: {
+                    trending: { songs: trendingRes.data?.results || [] },
+                    albums: releasesRes.data?.results || [],
+                    charts: chartsRes.data?.results || []
+                }
+            });
+        }
+
+        // If the route DID exist, return it normally
         res.json(data);
     } catch (error) {
         console.error("Home Modules Error:", error);
