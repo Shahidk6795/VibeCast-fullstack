@@ -202,45 +202,51 @@ const ArtistPage = () => {
   }, [activeTab, decodedArtistName, albumPage, artistAlbums.length]);
 
 
-  // FIX 1: Only check the CURRENTLY PLAYING song to see if the button should show Pause
+  // Safely check if current playing artist matches the page
   const currentSong = playlist?.[currentSongIndex];
-  const isCurrentArtistPlaying = currentSong?.artist?.toLowerCase().includes(decodedArtistName.toLowerCase());
+  const isCurrentArtistPlaying = Boolean(currentSong?.artist?.toLowerCase().includes(decodedArtistName.toLowerCase()));
 
   const handlePlayPause = useCallback(() => {
     if (!displaySongs || displaySongs.length === 0) return;
     
-    // If THIS artist is currently active in the mini-player, just toggle pause/play
     if (isCurrentArtistPlaying) {
       if (playPause) playPause();
     } else {
-      // Otherwise, overwrite the queue and start playing their catalog
       if (playPlaylist) playPlaylist(displaySongs, 0, true);
       if (setMiniPlayerVisible) setMiniPlayerVisible(true);
     }
   }, [displaySongs, isCurrentArtistPlaying, playPlaylist, playPause, setMiniPlayerVisible]);
 
 
-  // FIX 2: Bulletproof Spacebar Listener using a Ref to bypass React audio re-renders!
+  // FIX: Bulletproof Event Capturing Spacebar Listener
   const playPauseRef = useRef(handlePlayPause);
   
-  // Keep the ref updated with the freshest function without triggering re-renders
   useEffect(() => {
     playPauseRef.current = handlePlayPause;
   }, [handlePlayPause]);
 
   useEffect(() => {
     const handleKeyDown = (e) => {
-      // Don't trigger if typing in a search bar
       if (e.target.tagName === "INPUT" || e.target.tagName === "TEXTAREA") return;
       
       if (e.code === "Space" || e.key === " ") {
-        e.preventDefault(); // Stop page from scrolling down
-        playPauseRef.current();
+        if (e.repeat) return; // Prevent rapid-firing if they hold the spacebar down!
+        
+        e.preventDefault(); 
+        
+        // This stops the Global Mini Player from seeing the spacebar and conflicting with us
+        e.stopImmediatePropagation(); 
+        
+        if (playPauseRef.current) {
+          playPauseRef.current();
+        }
       }
     };
-    window.addEventListener("keydown", handleKeyDown);
-    return () => window.removeEventListener("keydown", handleKeyDown);
-  }, []); // Empty array ensures it never detaches!
+    
+    // { capture: true } ensures THIS component handles the spacebar BEFORE the rest of the app gets it
+    window.addEventListener("keydown", handleKeyDown, { capture: true });
+    return () => window.removeEventListener("keydown", handleKeyDown, { capture: true });
+  }, []);
 
 
   const selectSong = useCallback((index) => {
