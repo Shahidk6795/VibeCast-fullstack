@@ -222,7 +222,7 @@ export const fetchPlaylistDetails = async (req, res) => {
     const { id } = req.query;
     const SAAVN_API = process.env.SAAVN_API_URL; 
     try {
-        const response = await fetch(`${SAAVN_API}/playlists?id=${id}`);
+        const response = await fetch(`${SAAVN_API}/playlists?id=${id}&limit=50`);
         const data = await response.json();
         res.json(data);
     } catch (error) {
