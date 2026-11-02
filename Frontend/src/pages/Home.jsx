@@ -134,23 +134,27 @@ const Home = () => {
     }
   }, []);
 
-  // BULLETPROOF MODULE FETCHER
-  const fetchHomeModules = useCallback(async () => {
+const fetchHomeModules = useCallback(async () => {
     try {
-      const res = await fetch(`${API_URL}/api/artists/modules`);
+      // 1. Force the browser to fetch fresh data instead of getting a 304 Cache
+      const res = await fetch(`${API_URL}/api/artists/modules`, { cache: "no-store" });
+      
       if (res.ok) {
         const data = await res.json();
         const payload = data.data || data; 
         
-        const trending = payload.trending?.songs || payload.trending?.albums || payload.trending || [];
-        const charts = payload.charts || payload.top_charts || payload.playlists || [];
-        const releases = payload.albums || payload.new_releases || payload.new_trending || [];
+        // 2. LOG THE DATA SO WE CAN SEE ITS EXACT SHAPE
+        console.log("🚨 JIOSAAVN API RESPONSE:", payload);
+        
+        const trending = payload?.trending?.songs || payload?.trending?.albums || payload?.trending || [];
+        const charts = payload?.charts || payload?.top_charts || payload?.playlists || [];
+        const releases = payload?.albums || payload?.new_releases || payload?.new_trending || [];
         
         setTrendingSongs(Array.isArray(trending) ? trending : []);
         setTopCharts(Array.isArray(charts) ? charts : []);
         setNewReleases(Array.isArray(releases) ? releases : []);
       } else {
-        console.warn("Backend /modules returned 404. Waiting for Render deployment to finish...");
+        console.warn("Backend /modules returned an error.");
       }
     } catch (error) {
       console.error('Error fetching home modules:', error);
