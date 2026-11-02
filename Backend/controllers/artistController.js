@@ -192,16 +192,18 @@ export const fetchHomeModules = async (req, res) => {
         if (data.success === false || data.message?.includes('not found')) {
             console.log("Modules route missing on this API wrapper. Generating fallback modules...");
             
-            // Fire 3 simultaneous searches to construct the homepage feeds
+// Fire 3 simultaneous searches to construct the homepage feeds
             const [trendingRes, releasesRes, chartsRes] = await Promise.all([
-                fetch(`${SAAVN_API}/search/songs?query=trending bollywood&limit=12`).then(r => r.json()),
+                // FIX: Search for 'albums' here instead of 'songs'!
+                fetch(`${SAAVN_API}/search/albums?query=trending bollywood&limit=12`).then(r => r.json()),
                 fetch(`${SAAVN_API}/search/albums?query=new release&limit=12`).then(r => r.json()),
                 fetch(`${SAAVN_API}/search/playlists?query=top charts india&limit=12`).then(r => r.json())
             ]);
 
             return res.json({
                 data: {
-                    trending: { songs: trendingRes.data?.results || [] },
+                    // FIX: Map it to 'albums' so the frontend reads it correctly
+                    trending: { albums: trendingRes.data?.results || [] },
                     albums: releasesRes.data?.results || [],
                     charts: chartsRes.data?.results || []
                 }
