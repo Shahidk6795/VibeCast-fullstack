@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useContext, useCallback} from 'react';
+import React, { useState, useEffect, useContext, useCallback, useMemo } from 'react';
 import { useNavigate } from "react-router-dom";
 import { useUser } from "@clerk/clerk-react";
 import { PlayerContext } from "../context/PlayerContext";
@@ -29,7 +29,6 @@ const genreAmbience = {
   "Lo-Fi": "from-indigo-900/40 via-black to-black"
 };
 
-// FIX 1: We only hardcode names now. The app will fetch their LIVE images automatically!
 const vipArtistNames = [
   "Arijit Singh", "The Weeknd", "Taylor Swift", "Diljit Dosanjh", 
   "Drake", "Shreya Ghoshal", "Badshah", "Travis Scott", "Pritam", "Dua Lipa"
@@ -63,6 +62,9 @@ const isNewRelease = (dateString) => {
 const Home = () => {
   const [allTracks, setAllTracks] = useState([]);
   const [dbTracks, setDbTracks] = useState([]);
+  
+  // RESTORED: allArtists backup so genre filtering works again!
+  const [allArtists, setAllArtists] = useState([]);
   const [homeArtists, setHomeArtists] = useState([]); 
   
   const [activeGenre, setActiveGenre] = useState("All");
@@ -120,7 +122,6 @@ const Home = () => {
     }
   }, []);
 
-  // FIX 1: Fetch Live Avatars for the VIP Artists so they match perfectly!
   const fetchLiveVIPArtists = useCallback(async () => {
     try {
       const promises = vipArtistNames.map(name => 
@@ -136,31 +137,30 @@ const Home = () => {
         };
       });
 
+      setAllArtists(liveArtists);
       setHomeArtists(liveArtists.sort(() => 0.5 - Math.random()));
     } catch (error) {
       console.error("Error fetching live VIP artists:", error);
     }
   }, []);
 
-  // FIX 2: Ultra-forgiving JSON parsing for Home Modules
   const fetchHomeModules = useCallback(async () => {
     try {
       const res = await fetch(`${API_URL}/api/artists/modules`);
       if (res.ok) {
         const data = await res.json();
-        
-        // This handles standard APIs and Sumit Kolhe API wrappers
         const payload = data.data || data; 
         
-        const trending = payload.trending?.songs || payload.trending || [];
-        const charts = payload.charts || payload.top_charts || [];
-        const releases = payload.albums || payload.new_releases || [];
+        // Deep parsing to ensure we catch the data no matter how the API formats it
+        const trending = payload.trending?.songs || payload.trending?.albums || payload.trending || [];
+        const charts = payload.charts || payload.top_charts || payload.playlists || [];
+        const releases = payload.albums || payload.new_releases || payload.new_trending || [];
         
         setTrendingSongs(Array.isArray(trending) ? trending : []);
         setTopCharts(Array.isArray(charts) ? charts : []);
         setNewReleases(Array.isArray(releases) ? releases : []);
       } else {
-        console.warn("Backend /modules returned an error. Did you deploy to Render?");
+        console.error("Backend /modules returned an error! Did you deploy the backend code to Render?");
       }
     } catch (error) {
       console.error('Error fetching home modules:', error);
@@ -177,19 +177,33 @@ const Home = () => {
     navigate(`/artist/${encodeURIComponent(artist.name)}`, { state: { image: artist.image } }); 
   }, [navigate]);
 
+  // RESTORED: Genre clicking now properly filters BOTH the Top 5 tracks and the Artists!
   const handleGenreClick = (genre) => {
     setActiveGenre(genre);
+    
     if (genre === "All") {
       setDbTracks([...allTracks].sort(() => 0.5 - Math.random()));
+      setHomeArtists([...allArtists].sort(() => 0.5 - Math.random()));
     } else {
+      // Filter Tracks
       const filteredTracks = allTracks.filter(
         track => track.genre && track.genre.toLowerCase() === genre.toLowerCase()
       );
+      
+      // Filter Artists based on the tracks in that genre
+      const validArtistNames = filteredTracks.map(t => t.artist.toLowerCase());
+      const filteredArtists = allArtists.filter(artist => 
+        validArtistNames.some(validName => validName.includes(artist.name.toLowerCase()))
+      );
+
       setDbTracks(filteredTracks.length > 0 ? filteredTracks : [...allTracks].sort(() => 0.5 - Math.random()));
+      setHomeArtists(filteredArtists.length > 0 ? filteredArtists : [...allArtists].sort(() => 0.5 - Math.random()));
     }
   };
 
-  const heroArtist = homeArtists.length > 0 ? homeArtists[0] : null;
+  const heroArtist = useMemo(() => {
+    return [...homeArtists].sort(() => 0.5 - Math.random())[0];
+  }, [homeArtists]);
 
   return (
     <div className="relative w-full min-h-screen text-white overflow-x-hidden bg-black transition-colors duration-700">
