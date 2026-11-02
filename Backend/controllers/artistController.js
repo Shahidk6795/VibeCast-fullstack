@@ -39,24 +39,28 @@ export const deleteArtist = async (req, res) => {
     }
 };
 
-// --- HELPER: EXACT ARTIST ID MATCHER ---
-// Prevents grabbing the wrong artist if their first name matches someone else!
+// --- HELPER: ADVANCED EXACT ARTIST ID MATCHER ---
 const getExactArtistId = (results, queryName) => {
     if (!results || results.length === 0) return null;
     const target = queryName.toLowerCase().trim();
-    
-    // 1. Try for an exact match first
+
+    // 1. Try absolute direct match first
     const exact = results.find(a => (a.title || a.name || "").toLowerCase().trim() === target);
     if (exact) return exact.id;
 
-    // 2. Try ignoring special characters (e.g., "A.R. Rahman" vs "AR Rahman")
-    const partial = results.find(a => {
-        const name = (a.title || a.name || "").toLowerCase();
-        return name.replace(/[^a-z0-9]/g, '') === target.replace(/[^a-z0-9]/g, '');
-    });
-    if (partial) return partial.id;
+    // 2. Normalization Match (The KR$NA vs Krsna Solo Fix)
+    // Converts "$" to "s", removes special characters, and trims spaces
+    const normalize = (str) => str.toLowerCase().replace(/\$/g, 's').replace(/[^a-z0-9\s]/g, '').trim();
+    const normTarget = normalize(queryName); // "kr$na" becomes "krsna"
 
-    // 3. Ultimate fallback
+    // Look for an exact normalized match ("krsna" matches "krsna", but NOT "krsnasolo")
+    const exactNorm = results.find(a => normalize(a.title || a.name || "") === normTarget);
+    if (exactNorm) return exactNorm.id;
+
+    // 3. Final fallback: If it's a weird spelling, find the one that at least starts with the name
+    const startsWith = results.find(a => normalize(a.title || a.name || "").startsWith(normTarget));
+    if (startsWith) return startsWith.id;
+
     return results[0].id;
 };
 
