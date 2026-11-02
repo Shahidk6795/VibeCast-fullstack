@@ -52,6 +52,14 @@ const getValidAudio = (audioObj) => {
   return audioObj.url || audioObj.link || '';
 };
 
+const getArtistName = (item) => {
+  if (item.subtitle && item.subtitle !== "Album" && item.subtitle !== "Top Chart") return item.subtitle;
+  if (item.primaryArtists) return item.primaryArtists;
+  if (item.singers) return item.singers;
+  if (item.artists && Array.isArray(item.artists)) return item.artists.map(a => a.name).join(', ');
+  return "Various Artists";
+};
+
 const Home = () => {
   const [allTracks, setAllTracks] = useState([]);
   const [dbTracks, setDbTracks] = useState([]);
@@ -61,7 +69,7 @@ const Home = () => {
   const [activeGenre, setActiveGenre] = useState("All");
   const [recentlyPlayed, setRecentlyPlayed] = useState([]);
   
-  const [trendingSongs, setTrendingSongs] = useState([]);
+  const [trendingAlbums, setTrendingAlbums] = useState([]);
   const [topCharts, setTopCharts] = useState([]);
   const [newReleases, setNewReleases] = useState([]);
 
@@ -72,11 +80,7 @@ const Home = () => {
   useEffect(() => {
     const savedRecents = localStorage.getItem('vibecast_recently_played');
     if (savedRecents) {
-      try {
-        setRecentlyPlayed(JSON.parse(savedRecents));
-      } catch (e) {
-        console.error("Failed to parse recently played songs:", e);
-      }
+      try { setRecentlyPlayed(JSON.parse(savedRecents)); } catch (e) { console.error(e); }
     }
   }, []);
 
@@ -109,7 +113,7 @@ const Home = () => {
         setDbTracks(shuffled);
       }
     } catch (error) {
-      console.error('Error fetching tracks:', error);
+      console.error("Error fetching tracks:", error);
     }
   }, []);
 
@@ -119,7 +123,6 @@ const Home = () => {
         fetch(`${API_URL}/api/artists/search?query=${encodeURIComponent(name)}`).then(res => res.json())
       );
       const results = await Promise.all(promises);
-      
       const liveArtists = results.map((res, idx) => {
         const artistObj = res.data?.results?.[0];
         return {
@@ -127,7 +130,6 @@ const Home = () => {
           image: getValidImage(artistObj?.image)
         };
       });
-
       setAllArtists(liveArtists);
       setHomeArtists(liveArtists.sort(() => 0.5 - Math.random()));
     } catch (error) {
@@ -142,16 +144,16 @@ const Home = () => {
         const data = await res.json();
         const payload = data.data || data; 
         
-        const trending = payload.trending?.songs || payload.trending?.albums || payload.trending || [];
+        const trending = payload.trending?.albums || payload.trending || [];
         const charts = payload.charts || payload.top_charts || payload.playlists || [];
         const releases = payload.albums || payload.new_releases || payload.new_trending || [];
         
-        setTrendingSongs(Array.isArray(trending) ? trending : []);
+        setTrendingAlbums(Array.isArray(trending) ? trending : []);
         setTopCharts(Array.isArray(charts) ? charts : []);
         setNewReleases(Array.isArray(releases) ? releases : []);
       }
     } catch (error) {
-      console.error('Error fetching home modules:', error);
+      console.error("Error fetching home modules:", error);
     }
   }, []);
 
@@ -182,9 +184,7 @@ const Home = () => {
 
   const generatedMixes = useMemo(() => {
     if (allTracks.length === 0) return [];
-    
     let sourceTracks = activeGenre === "All" ? allTracks : dbTracks;
-    
     const mixThemes = [
       { title: 'Flow State', color: 'bg-purple-600' },
       { title: 'Vibe Check', color: 'bg-blue-600' },
@@ -193,23 +193,16 @@ const Home = () => {
     ];
 
     const activeMixes = [];
-    
     for (let i = 0; i < mixThemes.length; i++) {
       if (sourceTracks.length >= 5) {
         const shuffled = [...sourceTracks].sort(() => 0.5 - Math.random());
         const playlistTracks = shuffled.slice(0, 12).map(t => ({
           name: t.title, artist: t.artist, path: getValidAudio(t.audio_url), image: getValidImage(t.cover_url)
         }));
-
         const uniqueArtists = [...new Set(playlistTracks.map(t => t.artist))];
         const subtitle = uniqueArtists.slice(0, 3).join(', ') + (uniqueArtists.length > 3 ? ' and more' : '');
 
-        activeMixes.push({
-          ...mixThemes[i],
-          tracks: playlistTracks,
-          subtitle: subtitle,
-          cover: playlistTracks[0].image
-        });
+        activeMixes.push({ ...mixThemes[i], tracks: playlistTracks, subtitle: subtitle, cover: playlistTracks[0].image });
       }
     }
     return activeMixes;
@@ -295,7 +288,6 @@ const Home = () => {
           </section>
         )}
 
-        {/* RESTORED: Made For You */}
         {generatedMixes.length > 0 && (
           <section className="mb-14">
             <h2 className="text-2xl font-bold mb-5 text-white flex items-center gap-2 hover:text-[#1db954] transition-colors duration-300">
@@ -329,36 +321,26 @@ const Home = () => {
           </section>
         )}
 
-        {trendingSongs.length > 0 && (
+        {trendingAlbums.length > 0 && (
           <section className="mb-14">
             <h2 className="text-2xl font-bold mb-5 text-white flex items-center gap-2">
-              <Flame className="w-6 h-6 text-orange-500" /> Trending Now
+              <Flame className="w-6 h-6 text-orange-500" /> Trending Albums
             </h2>
             <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-6">
-              {trendingSongs.slice(0, 12).map((song, idx) => {
-                const formatted = { 
-                  name: (song.name || song.title || "Unknown Track").replace(/&quot;/g, '"'), 
-                  artist: song.primaryArtists || song.singers || song.subtitle || "Unknown Artist", 
-                  path: getValidAudio(song.downloadUrl || song.url || song.media_url), 
-                  image: getValidImage(song.image) 
-                };
+              {trendingAlbums.slice(0, 12).map((album, idx) => {
+                const albumTitle = (album.name || album.title || "Unknown Album").replace(/&quot;/g, '"');
                 return (
                   <div
-                    key={song.id || idx}
-                    onClick={() => { playPlaylist?.([formatted], 0); trackPlayed(formatted); }}
+                    key={album.id || idx}
+                    onClick={() => navigate(`/album/${album.id}`, { state: { type: 'album', image: getValidImage(album.image), title: albumTitle } })}
                     className="group flex flex-col gap-2 cursor-pointer transition-all duration-300"
                   >
                     <div className="relative w-full aspect-square rounded-lg overflow-hidden shadow-lg bg-[#181818]">
-                      <img src={formatted.image} alt={formatted.name} className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105" />
-                      <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-all duration-300">
-                        <div className="w-12 h-12 bg-[#1db954] rounded-full flex items-center justify-center shadow-2xl transform translate-y-4 group-hover:translate-y-0 transition-transform duration-300">
-                          <Play className="w-6 h-6 text-black fill-current ml-1" />
-                        </div>
-                      </div>
+                      <img src={getValidImage(album.image)} alt={albumTitle} className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105" />
                     </div>
                     <div className="flex flex-col px-1">
-                      <p className="font-bold text-[15px] leading-tight text-white truncate group-hover:text-[#1db954] transition-colors">{formatted.name}</p>
-                      <p className="text-gray-400 text-xs truncate mt-1">{formatted.artist}</p>
+                      <p className="font-bold text-[15px] leading-tight text-white truncate group-hover:text-[#1db954] transition-colors">{albumTitle}</p>
+                      <p className="text-gray-400 text-xs truncate mt-1">{getArtistName(album)}</p>
                     </div>
                   </div>
                 );
@@ -386,7 +368,7 @@ const Home = () => {
                     </div>
                     <div className="flex flex-col px-1">
                       <p className="font-bold text-[15px] leading-tight text-white truncate group-hover:text-[#1db954] transition-colors">{albumTitle}</p>
-                      <p className="text-gray-400 text-xs truncate mt-1 capitalize">{album.subtitle || album.role || album.language || "Album"}</p>
+                      <p className="text-gray-400 text-xs truncate mt-1">{getArtistName(album)}</p>
                     </div>
                   </div>
                 );
@@ -414,7 +396,7 @@ const Home = () => {
                     </div>
                     <div className="flex flex-col px-1">
                       <p className="font-bold text-[15px] leading-tight text-white truncate group-hover:text-[#1db954] transition-colors">{chartTitle}</p>
-                      <p className="text-gray-400 text-xs truncate mt-1 capitalize">{chart.subtitle || "Top Chart"}</p>
+                      <p className="text-gray-400 text-xs truncate mt-1 capitalize">{getArtistName(chart)}</p>
                     </div>
                   </div>
                 );
@@ -423,7 +405,6 @@ const Home = () => {
           </section>
         )}
 
-        {/* RESTORED: Your Library */}
         <section className="mb-14">
           <h2 className="text-2xl font-bold mb-5 text-white hover:text-[#1db954] transition-colors duration-300">
             Your Library
@@ -434,7 +415,6 @@ const Home = () => {
           </div>
         </section>
 
-        {/* RESTORED: Select Your Vibe */}
         <section className="mb-14">
           <h2 className="text-2xl font-bold mb-5 text-white hover:text-[#1db954] transition-colors duration-300">
             Select Your Vibe
@@ -452,7 +432,6 @@ const Home = () => {
           </div>
         </section>
 
-        {/* RESTORED: Trending Artists Ticker */}
         {homeArtists.length > 0 && (
           <section className="mb-12 overflow-hidden relative">
             <h2 className="text-2xl font-bold mb-5 hover:underline text-[#1db954] transition-colors duration-300">

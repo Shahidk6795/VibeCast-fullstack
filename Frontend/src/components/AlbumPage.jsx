@@ -14,13 +14,13 @@ const formatTime = (sec) => {
 };
 
 const getValidImage = (imageObj) => {
-  if (!imageObj) return 'https://ik.imagekit.io/VibeCast/images/default-artist.jpg';
+  if (!imageObj) return 'https://ik.imagekit.io/vibecast/images/default-artist.jpg';
   if (typeof imageObj === 'string') {
-    if (imageObj === "[object Object]") return 'https://ik.imagekit.io/VibeCast/images/default-artist.jpg';
+    if (imageObj === "[object Object]") return 'https://ik.imagekit.io/vibecast/images/default-artist.jpg';
     return imageObj;
   }
   if (Array.isArray(imageObj)) return imageObj[imageObj.length - 1]?.url || imageObj[imageObj.length - 1]?.link || imageObj[0]?.url;
-  return imageObj.url || imageObj.link || 'https://ik.imagekit.io/VibeCast/images/default-artist.jpg';
+  return imageObj.url || imageObj.link || 'https://ik.imagekit.io/vibecast/images/default-artist.jpg';
 };
 
 const getValidAudio = (audioObj) => {
@@ -59,29 +59,39 @@ const AlbumPage = () => {
     const fetchAlbumDetails = async () => {
       setIsLoading(true);
       try {
-        const res = await fetch(`${API_URL}/api/albums/${finalAlbumId}`);
-        if (res.ok) {
-          const data = await res.json();
-          const rawAlbum = data.data || {};
-          
-          setAlbumInfo({
-            title: rawAlbum.name || rawAlbum.title || location.state?.title || "Album",
-            year: rawAlbum.year || rawAlbum.releaseDate?.substring(0, 4) || location.state?.year || "",
-            image: getValidImage(rawAlbum.image) || location.state?.image
-          });
+        // FIX: Type-Aware API Routing (Playlist vs Album)
+        const isPlaylist = location.state?.type === 'playlist';
+        let data = {};
 
-          const songs = rawAlbum.songs || rawAlbum.list || [];
-          const formattedSongs = songs.map(song => ({
-            id: song.id,
-            name: song.name?.replace(/&quot;/g, '"'),
-            artist: song.artists?.primary?.map(a => a.name).join(', ') || "Unknown Artist",
-            path: getValidAudio(song.downloadUrl || song.url),
-            image: getValidImage(song.image),
-            duration: formatTime(song.duration)
-          }));
-
-          setAlbumSongs(formattedSongs);
+        if (isPlaylist) {
+          // It's a Top Chart / Playlist - fetch from Saavn's playlist endpoint
+          const res = await fetch(`https://saavn.dev/api/playlists?id=${finalAlbumId}`);
+          const json = await res.json();
+          data = json.data || {};
+        } else {
+          // It's a standard Album
+          const res = await fetch(`${API_URL}/api/albums/${finalAlbumId}`);
+          const json = await res.json();
+          data = json.data || {};
         }
+        
+        setAlbumInfo({
+          title: data.name || data.title || location.state?.title || "Playlist",
+          year: data.year || data.releaseDate?.substring(0, 4) || location.state?.year || "",
+          image: getValidImage(data.image) || location.state?.image
+        });
+
+        const songs = data.songs || data.list || [];
+        const formattedSongs = songs.map(song => ({
+          id: song.id,
+          name: song.name?.replace(/&quot;/g, '"'),
+          artist: song.artists?.primary?.map(a => a.name).join(', ') || song.primaryArtists || song.singers || "Unknown Artist",
+          path: getValidAudio(song.downloadUrl || song.url),
+          image: getValidImage(song.image),
+          duration: formatTime(song.duration)
+        }));
+
+        setAlbumSongs(formattedSongs);
       } catch (err) {
         console.error("Failed to load album tracks:", err);
       } finally {
@@ -103,7 +113,6 @@ const AlbumPage = () => {
   }, [albumInfo.image]);
 
   const currentSong = playlist?.[currentSongIndex];
-  // Check if the current song belongs to this album's list
   const isCurrentAlbumPlaying = playlist && playlist.length > 0 && albumSongs.some(s => s.id === currentSong?.id);
 
   const handlePlayPause = useCallback(() => {
@@ -117,7 +126,6 @@ const AlbumPage = () => {
     }
   }, [albumSongs, isCurrentAlbumPlaying, playPlaylist, playPause, setMiniPlayerVisible]);
 
-  // Bulletproof Spacebar Listener for the Album Page
   const playPauseRef = useRef(handlePlayPause);
   
   useEffect(() => {
@@ -153,9 +161,12 @@ const AlbumPage = () => {
         <div className="flex items-end max-w-5xl mx-auto h-full px-6 pb-8">
           <img src={albumInfo.image} alt={albumInfo.title} className="w-56 h-56 shadow-2xl object-cover rounded-md mr-6 border-4 border-white/10 pointer-events-none" />
           <div>
-            <p className="text-sm font-bold uppercase text-white/80">Album</p>
+            <p className="text-sm font-bold uppercase text-white/80">{location.state?.type === 'playlist' ? 'Playlist' : 'Album'}</p>
             <h1 className="text-6xl font-black mb-2 drop-shadow-lg truncate max-w-2xl">{albumInfo.title}</h1>
-            <p className="text-sm text-gray-300">{albumInfo.year} • {albumSongs.length} songs</p>
+            <p className="text-sm text-gray-300">
+              {albumInfo.year ? `${albumInfo.year} • ` : ""}
+              {albumSongs.length} {albumSongs.length === 1 ? 'song' : 'songs'}
+            </p>
           </div>
         </div>
       </div>
@@ -187,7 +198,6 @@ const AlbumPage = () => {
               return (
                 <div key={idx} onClick={() => { playPlaylist(albumSongs, idx, true); if (setMiniPlayerVisible) setMiniPlayerVisible(true); }} className={`group grid grid-cols-[16px_48px_1fr_90px] items-center gap-4 px-2 py-2 rounded-md cursor-pointer transition duration-200 clear-bg-on-hover ${isCurrentSong ? "clear-bg-active text-white" : "text-gray-400"}`}>
                   
-                  {/* The Animated Equalizer GIF logic added here! */}
                   <div className="font-medium text-sm text-center flex justify-center items-center">
                     {isCurrentSong && isPlaying ? (
                       <img 
