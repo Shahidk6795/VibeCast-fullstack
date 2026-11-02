@@ -4,7 +4,7 @@ import { useUser } from "@clerk/clerk-react";
 import { PlayerContext } from "../context/PlayerContext";
 import "../index.css";
 import Hyperspeed from "@/components/Hyperspeed";
-import { Play, Dumbbell, Coffee, Heart, Sparkles, Sun, CloudSun, Moon, Clock, Flame, BarChart2, Radio, TrendingUp, Music } from "lucide-react";
+import { Play, Dumbbell, Coffee, Heart, Sparkles, Sun, CloudSun, Moon, Clock, Flame, BarChart2, Radio, Music } from "lucide-react";
 import LikedSongsCard from "@/components/LikedSongsCard";
 import PlaylistManager from "@/components/PlaylistManager";
 import { API_URL } from '../config.js';
@@ -36,11 +36,12 @@ const vipArtistNames = [
 
 const getValidImage = (imageObj) => {
   if (!imageObj) return 'https://ik.imagekit.io/vibecast/images/default-artist.jpg';
-  if (typeof imageObj === 'string') {
-    if (imageObj === "[object Object]") return 'https://ik.imagekit.io/vibecast/images/default-artist.jpg';
-    return imageObj;
+  if (typeof imageObj === 'string') return imageObj;
+  
+  if (Array.isArray(imageObj)) {
+    const highRes = imageObj.find(img => img.quality === '500x500' || img.url?.includes('500x500'));
+    return highRes?.url || highRes?.link || imageObj[imageObj.length - 1]?.url || imageObj[imageObj.length - 1]?.link;
   }
-  if (Array.isArray(imageObj)) return imageObj[imageObj.length - 1]?.url || imageObj[imageObj.length - 1]?.link || imageObj[0]?.url;
   return imageObj.url || imageObj.link || 'https://ik.imagekit.io/vibecast/images/default-artist.jpg';
 };
 
@@ -66,7 +67,7 @@ const Home = () => {
 
   const { user } = useUser();
   const navigate = useNavigate();
-  const { playPlaylist} = useContext(PlayerContext) || {};
+  const { playPlaylist } = useContext(PlayerContext) || {};
 
   useEffect(() => {
     const savedRecents = localStorage.getItem('vibecast_recently_played');
@@ -260,10 +261,7 @@ const Home = () => {
               {recentlyPlayed.map((track, idx) => (
                 <div
                   key={idx}
-                  onClick={() => {
-                    playPlaylist?.([track], 0);
-                    trackPlayed(track);
-                  }}
+                  onClick={() => { playPlaylist?.([track], 0); trackPlayed(track); }}
                   className="snap-start group flex items-center gap-3 p-2 pr-4 rounded-xl bg-white/5 hover:bg-white/15 border border-white/5 cursor-pointer backdrop-blur-md transition-all duration-300 flex-shrink-0 w-[200px] sm:w-[240px]"
                 >
                   <img src={track.image} alt={track.name} className="w-12 h-12 rounded-lg object-cover flex-shrink-0" />
@@ -289,9 +287,7 @@ const Home = () => {
               <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-[#1db954]/20 border border-[#1db954]/50 text-[#1db954] text-xs font-bold uppercase tracking-widest mb-3 backdrop-blur-md">
                 <Sparkles className="w-3 h-3" /> Artist of the Week
               </div>
-              <h2 className="text-4xl md:text-6xl font-black text-white mb-4 drop-shadow-lg">
-                {heroArtist.name}
-              </h2>
+              <h2 className="text-4xl md:text-6xl font-black text-white mb-4 drop-shadow-lg">{heroArtist.name}</h2>
               <button className="flex items-center gap-2 bg-[#1db954] hover:bg-[#1ed760] text-black px-6 py-3 rounded-full font-bold transition-transform hover:scale-105">
                 <Play className="w-5 h-5 fill-black" /> Explore Music
               </button>
@@ -299,6 +295,7 @@ const Home = () => {
           </section>
         )}
 
+        {/* RESTORED: Made For You */}
         {generatedMixes.length > 0 && (
           <section className="mb-14">
             <h2 className="text-2xl font-bold mb-5 text-white flex items-center gap-2 hover:text-[#1db954] transition-colors duration-300">
@@ -332,13 +329,12 @@ const Home = () => {
           </section>
         )}
 
-        {/* BULLETPROOF MAPPING: Trending Songs */}
         {trendingSongs.length > 0 && (
           <section className="mb-14">
             <h2 className="text-2xl font-bold mb-5 text-white flex items-center gap-2">
               <Flame className="w-6 h-6 text-orange-500" /> Trending Now
             </h2>
-            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-4 sm:gap-6">
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-6">
               {trendingSongs.slice(0, 12).map((song, idx) => {
                 const formatted = { 
                   name: (song.name || song.title || "Unknown Track").replace(/&quot;/g, '"'), 
@@ -350,19 +346,19 @@ const Home = () => {
                   <div
                     key={song.id || idx}
                     onClick={() => { playPlaylist?.([formatted], 0); trackPlayed(formatted); }}
-                    className="group flex flex-col gap-3 p-3 rounded-xl bg-white/5 hover:bg-white/10 border border-transparent hover:border-white/10 transition-all duration-300 cursor-pointer shadow-lg hover:-translate-y-1"
+                    className="group flex flex-col gap-2 cursor-pointer transition-all duration-300"
                   >
-                    <div className="relative w-full aspect-square rounded-lg overflow-hidden shadow-md bg-black">
-                      <img src={formatted.image} alt={formatted.name} className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110" />
-                      <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity duration-300">
-                        <div className="w-10 h-10 bg-[#1db954] rounded-full flex items-center justify-center shadow-lg transform translate-y-2 group-hover:translate-y-0 transition-transform duration-300">
-                          <Play className="w-5 h-5 text-black fill-current ml-1" />
+                    <div className="relative w-full aspect-square rounded-lg overflow-hidden shadow-lg bg-[#181818]">
+                      <img src={formatted.image} alt={formatted.name} className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105" />
+                      <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-all duration-300">
+                        <div className="w-12 h-12 bg-[#1db954] rounded-full flex items-center justify-center shadow-2xl transform translate-y-4 group-hover:translate-y-0 transition-transform duration-300">
+                          <Play className="w-6 h-6 text-black fill-current ml-1" />
                         </div>
                       </div>
                     </div>
-                    <div className="flex flex-col">
-                      <p className="font-bold text-sm text-white truncate group-hover:text-[#1db954] transition-colors">{formatted.name}</p>
-                      <p className="text-gray-400 text-xs truncate mt-0.5">{formatted.artist}</p>
+                    <div className="flex flex-col px-1">
+                      <p className="font-bold text-[15px] leading-tight text-white truncate group-hover:text-[#1db954] transition-colors">{formatted.name}</p>
+                      <p className="text-gray-400 text-xs truncate mt-1">{formatted.artist}</p>
                     </div>
                   </div>
                 );
@@ -371,27 +367,26 @@ const Home = () => {
           </section>
         )}
 
-        {/* BULLETPROOF MAPPING: New Releases */}
         {newReleases.length > 0 && (
           <section className="mb-14">
             <h2 className="text-2xl font-bold mb-5 text-white flex items-center gap-2">
               <Radio className="w-6 h-6 text-purple-500" /> New Releases
             </h2>
-            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-4 sm:gap-6">
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-6">
               {newReleases.slice(0, 12).map((album) => {
                 const albumTitle = (album.name || album.title || "Unknown Album").replace(/&quot;/g, '"');
                 return (
                   <div 
                     key={album.id}
-                    onClick={() => navigate(`/album/${album.id}`, { state: { image: getValidImage(album.image), title: albumTitle, year: album.year } })}
-                    className="group flex flex-col gap-3 p-3 rounded-xl bg-white/5 hover:bg-white/10 border border-transparent hover:border-white/10 transition-all duration-300 cursor-pointer shadow-lg hover:-translate-y-1"
+                    onClick={() => navigate(`/album/${album.id}`, { state: { type: 'album', image: getValidImage(album.image), title: albumTitle, year: album.year } })}
+                    className="group flex flex-col gap-2 cursor-pointer transition-all duration-300"
                   >
-                    <div className="relative w-full aspect-square rounded-lg overflow-hidden shadow-md bg-black">
-                      <img src={getValidImage(album.image)} alt={albumTitle} className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110" />
+                    <div className="relative w-full aspect-square rounded-lg overflow-hidden shadow-lg bg-[#181818]">
+                      <img src={getValidImage(album.image)} alt={albumTitle} className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105" />
                     </div>
-                    <div className="flex flex-col">
-                      <p className="font-bold text-sm text-white truncate group-hover:text-[#1db954]">{albumTitle}</p>
-                      <p className="text-xs text-gray-400 mt-0.5 capitalize truncate">{album.subtitle || album.role || album.language || "Album"}</p>
+                    <div className="flex flex-col px-1">
+                      <p className="font-bold text-[15px] leading-tight text-white truncate group-hover:text-[#1db954] transition-colors">{albumTitle}</p>
+                      <p className="text-gray-400 text-xs truncate mt-1 capitalize">{album.subtitle || album.role || album.language || "Album"}</p>
                     </div>
                   </div>
                 );
@@ -400,27 +395,26 @@ const Home = () => {
           </section>
         )}
 
-        {/* BULLETPROOF MAPPING: Top Charts */}
         {topCharts.length > 0 && (
           <section className="mb-14">
             <h2 className="text-2xl font-bold mb-5 text-white flex items-center gap-2">
               <BarChart2 className="w-6 h-6 text-blue-500" /> Top Charts
             </h2>
-            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-4 sm:gap-6">
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-6">
               {topCharts.slice(0, 12).map((chart) => {
                 const chartTitle = (chart.title || chart.name || "Chart").replace(/&quot;/g, '"');
                 return (
                   <div 
                     key={chart.id}
-                    onClick={() => navigate(`/album/${chart.id}`, { state: { image: getValidImage(chart.image), title: chartTitle } })}
-                    className="group flex flex-col gap-3 p-3 rounded-xl bg-white/5 hover:bg-white/10 border border-transparent hover:border-white/10 transition-all duration-300 cursor-pointer shadow-lg hover:-translate-y-1"
+                    onClick={() => navigate(`/album/${chart.id}`, { state: { type: chart.type || 'playlist', image: getValidImage(chart.image), title: chartTitle } })}
+                    className="group flex flex-col gap-2 cursor-pointer transition-all duration-300"
                   >
-                    <div className="relative w-full aspect-square rounded-lg overflow-hidden shadow-md bg-black">
-                      <img src={getValidImage(chart.image)} alt={chartTitle} className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110" />
+                    <div className="relative w-full aspect-square rounded-lg overflow-hidden shadow-lg bg-[#181818]">
+                      <img src={getValidImage(chart.image)} alt={chartTitle} className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105" />
                     </div>
-                    <div className="flex flex-col">
-                      <p className="font-bold text-sm text-white truncate group-hover:text-[#1db954]">{chartTitle}</p>
-                      <p className="text-xs text-gray-400 mt-0.5 capitalize truncate">{chart.subtitle || "Top Chart"}</p>
+                    <div className="flex flex-col px-1">
+                      <p className="font-bold text-[15px] leading-tight text-white truncate group-hover:text-[#1db954] transition-colors">{chartTitle}</p>
+                      <p className="text-gray-400 text-xs truncate mt-1 capitalize">{chart.subtitle || "Top Chart"}</p>
                     </div>
                   </div>
                 );
@@ -429,6 +423,7 @@ const Home = () => {
           </section>
         )}
 
+        {/* RESTORED: Your Library */}
         <section className="mb-14">
           <h2 className="text-2xl font-bold mb-5 text-white hover:text-[#1db954] transition-colors duration-300">
             Your Library
@@ -439,6 +434,7 @@ const Home = () => {
           </div>
         </section>
 
+        {/* RESTORED: Select Your Vibe */}
         <section className="mb-14">
           <h2 className="text-2xl font-bold mb-5 text-white hover:text-[#1db954] transition-colors duration-300">
             Select Your Vibe
@@ -456,6 +452,7 @@ const Home = () => {
           </div>
         </section>
 
+        {/* RESTORED: Trending Artists Ticker */}
         {homeArtists.length > 0 && (
           <section className="mb-12 overflow-hidden relative">
             <h2 className="text-2xl font-bold mb-5 hover:underline text-[#1db954] transition-colors duration-300">
