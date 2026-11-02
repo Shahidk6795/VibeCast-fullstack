@@ -13,6 +13,9 @@ router.get('/default', artistController.fetchDefaultArtists);
 // NEW: The Homepage Feeds Route
 router.get('/modules', artistController.fetchHomeModules); 
 
+// Add this line right below your other router.get() lines:
+router.get('/playlists', artistController.fetchPlaylistDetails);
+
 router.get('/name/:artistName', artistController.fetchArtistByName);
 router.delete('/:id', artistController.deleteArtist);
 

@@ -217,3 +217,16 @@ export const fetchHomeModules = async (req, res) => {
         res.status(500).json({ error: "Failed to fetch home modules" });
     }
 };
+// NEW: Fetch Playlist / Top Chart Details
+export const fetchPlaylistDetails = async (req, res) => {
+    const { id } = req.query;
+    const SAAVN_API = process.env.SAAVN_API_URL; 
+    try {
+        const response = await fetch(`${SAAVN_API}/playlists?id=${id}`);
+        const data = await response.json();
+        res.json(data);
+    } catch (error) {
+        console.error("Playlist Error:", error);
+        res.status(500).json({ error: "Failed to fetch playlist details" });
+    }
+};
