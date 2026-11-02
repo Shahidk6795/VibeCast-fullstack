@@ -66,7 +66,7 @@ const Home = () => {
 
   const { user } = useUser();
   const navigate = useNavigate();
-  const { playPlaylist } = useContext(PlayerContext) || {};
+  const { playPlaylist} = useContext(PlayerContext) || {};
 
   useEffect(() => {
     const savedRecents = localStorage.getItem('vibecast_recently_played');
@@ -134,27 +134,20 @@ const Home = () => {
     }
   }, []);
 
-const fetchHomeModules = useCallback(async () => {
+  const fetchHomeModules = useCallback(async () => {
     try {
-      // 1. Force the browser to fetch fresh data instead of getting a 304 Cache
-      const res = await fetch(`${API_URL}/api/artists/modules`, { cache: "no-store" });
-      
+      const res = await fetch(`${API_URL}/api/artists/modules`);
       if (res.ok) {
         const data = await res.json();
         const payload = data.data || data; 
         
-        // 2. LOG THE DATA SO WE CAN SEE ITS EXACT SHAPE
-        console.log("🚨 JIOSAAVN API RESPONSE:", payload);
-        
-        const trending = payload?.trending?.songs || payload?.trending?.albums || payload?.trending || [];
-        const charts = payload?.charts || payload?.top_charts || payload?.playlists || [];
-        const releases = payload?.albums || payload?.new_releases || payload?.new_trending || [];
+        const trending = payload.trending?.songs || payload.trending?.albums || payload.trending || [];
+        const charts = payload.charts || payload.top_charts || payload.playlists || [];
+        const releases = payload.albums || payload.new_releases || payload.new_trending || [];
         
         setTrendingSongs(Array.isArray(trending) ? trending : []);
         setTopCharts(Array.isArray(charts) ? charts : []);
         setNewReleases(Array.isArray(releases) ? releases : []);
-      } else {
-        console.warn("Backend /modules returned an error.");
       }
     } catch (error) {
       console.error('Error fetching home modules:', error);
@@ -171,7 +164,6 @@ const fetchHomeModules = useCallback(async () => {
     navigate(`/artist/${encodeURIComponent(artist.name)}`, { state: { image: artist.image } }); 
   }, [navigate]);
 
-  // RESTORED: Genre filtering for Tracks, Artists, and Mixes
   const handleGenreClick = (genre) => {
     setActiveGenre(genre);
     if (genre === "All") {
@@ -187,7 +179,6 @@ const fetchHomeModules = useCallback(async () => {
     }
   };
 
-  // RESTORED: Thematic "Made For You" Mixes that react to Genre clicks!
   const generatedMixes = useMemo(() => {
     if (allTracks.length === 0) return [];
     
@@ -308,7 +299,6 @@ const fetchHomeModules = useCallback(async () => {
           </section>
         )}
 
-        {/* RESTORED: "Made For You" Playlists */}
         {generatedMixes.length > 0 && (
           <section className="mb-14">
             <h2 className="text-2xl font-bold mb-5 text-white flex items-center gap-2 hover:text-[#1db954] transition-colors duration-300">
@@ -342,7 +332,7 @@ const fetchHomeModules = useCallback(async () => {
           </section>
         )}
 
-        {/* UI UPGRADE: Trending Now styled as a dense Grid matching your Screenshot */}
+        {/* BULLETPROOF MAPPING: Trending Songs */}
         {trendingSongs.length > 0 && (
           <section className="mb-14">
             <h2 className="text-2xl font-bold mb-5 text-white flex items-center gap-2">
@@ -351,9 +341,9 @@ const fetchHomeModules = useCallback(async () => {
             <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-4 sm:gap-6">
               {trendingSongs.slice(0, 12).map((song, idx) => {
                 const formatted = { 
-                  name: song.name?.replace(/&quot;/g, '"'), 
-                  artist: song.primaryArtists || song.singers || "Unknown", 
-                  path: getValidAudio(song.downloadUrl || song.url), 
+                  name: (song.name || song.title || "Unknown Track").replace(/&quot;/g, '"'), 
+                  artist: song.primaryArtists || song.singers || song.subtitle || "Unknown Artist", 
+                  path: getValidAudio(song.downloadUrl || song.url || song.media_url), 
                   image: getValidImage(song.image) 
                 };
                 return (
@@ -381,54 +371,60 @@ const fetchHomeModules = useCallback(async () => {
           </section>
         )}
 
-        {/* UI UPGRADE: New Releases Grid */}
+        {/* BULLETPROOF MAPPING: New Releases */}
         {newReleases.length > 0 && (
           <section className="mb-14">
             <h2 className="text-2xl font-bold mb-5 text-white flex items-center gap-2">
               <Radio className="w-6 h-6 text-purple-500" /> New Releases
             </h2>
             <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-4 sm:gap-6">
-              {newReleases.slice(0, 12).map((album) => (
-                <div 
-                  key={album.id}
-                  onClick={() => navigate(`/album/${album.id}`, { state: { image: getValidImage(album.image), title: album.name || album.title, year: album.year } })}
-                  className="group flex flex-col gap-3 p-3 rounded-xl bg-white/5 hover:bg-white/10 border border-transparent hover:border-white/10 transition-all duration-300 cursor-pointer shadow-lg hover:-translate-y-1"
-                >
-                  <div className="relative w-full aspect-square rounded-lg overflow-hidden shadow-md bg-black">
-                    <img src={getValidImage(album.image)} alt={album.title || album.name} className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110" />
+              {newReleases.slice(0, 12).map((album) => {
+                const albumTitle = (album.name || album.title || "Unknown Album").replace(/&quot;/g, '"');
+                return (
+                  <div 
+                    key={album.id}
+                    onClick={() => navigate(`/album/${album.id}`, { state: { image: getValidImage(album.image), title: albumTitle, year: album.year } })}
+                    className="group flex flex-col gap-3 p-3 rounded-xl bg-white/5 hover:bg-white/10 border border-transparent hover:border-white/10 transition-all duration-300 cursor-pointer shadow-lg hover:-translate-y-1"
+                  >
+                    <div className="relative w-full aspect-square rounded-lg overflow-hidden shadow-md bg-black">
+                      <img src={getValidImage(album.image)} alt={albumTitle} className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110" />
+                    </div>
+                    <div className="flex flex-col">
+                      <p className="font-bold text-sm text-white truncate group-hover:text-[#1db954]">{albumTitle}</p>
+                      <p className="text-xs text-gray-400 mt-0.5 capitalize truncate">{album.subtitle || album.role || album.language || "Album"}</p>
+                    </div>
                   </div>
-                  <div className="flex flex-col">
-                    <p className="font-bold text-sm text-white truncate group-hover:text-[#1db954]">{album.title || album.name}</p>
-                    <p className="text-xs text-gray-400 mt-0.5 capitalize truncate">{album.subtitle || album.role || "Album"}</p>
-                  </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           </section>
         )}
 
-        {/* UI UPGRADE: Top Charts Grid */}
+        {/* BULLETPROOF MAPPING: Top Charts */}
         {topCharts.length > 0 && (
           <section className="mb-14">
             <h2 className="text-2xl font-bold mb-5 text-white flex items-center gap-2">
               <BarChart2 className="w-6 h-6 text-blue-500" /> Top Charts
             </h2>
             <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-4 sm:gap-6">
-              {topCharts.slice(0, 12).map((chart) => (
-                <div 
-                  key={chart.id}
-                  onClick={() => navigate(`/album/${chart.id}`, { state: { image: getValidImage(chart.image), title: chart.title || chart.name } })}
-                  className="group flex flex-col gap-3 p-3 rounded-xl bg-white/5 hover:bg-white/10 border border-transparent hover:border-white/10 transition-all duration-300 cursor-pointer shadow-lg hover:-translate-y-1"
-                >
-                  <div className="relative w-full aspect-square rounded-lg overflow-hidden shadow-md bg-black">
-                    <img src={getValidImage(chart.image)} alt={chart.title || chart.name} className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110" />
+              {topCharts.slice(0, 12).map((chart) => {
+                const chartTitle = (chart.title || chart.name || "Chart").replace(/&quot;/g, '"');
+                return (
+                  <div 
+                    key={chart.id}
+                    onClick={() => navigate(`/album/${chart.id}`, { state: { image: getValidImage(chart.image), title: chartTitle } })}
+                    className="group flex flex-col gap-3 p-3 rounded-xl bg-white/5 hover:bg-white/10 border border-transparent hover:border-white/10 transition-all duration-300 cursor-pointer shadow-lg hover:-translate-y-1"
+                  >
+                    <div className="relative w-full aspect-square rounded-lg overflow-hidden shadow-md bg-black">
+                      <img src={getValidImage(chart.image)} alt={chartTitle} className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110" />
+                    </div>
+                    <div className="flex flex-col">
+                      <p className="font-bold text-sm text-white truncate group-hover:text-[#1db954]">{chartTitle}</p>
+                      <p className="text-xs text-gray-400 mt-0.5 capitalize truncate">{chart.subtitle || "Top Chart"}</p>
+                    </div>
                   </div>
-                  <div className="flex flex-col">
-                    <p className="font-bold text-sm text-white truncate group-hover:text-[#1db954]">{chart.title || chart.name}</p>
-                    <p className="text-xs text-gray-400 mt-0.5 capitalize truncate">Top Chart</p>
-                  </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           </section>
         )}
