@@ -13,15 +13,14 @@ const formatTime = (sec) => {
   return `${minutes}:${seconds}`;
 };
 
-// Safety helpers for Images and Audio
 const getValidImage = (imageObj) => {
-  if (!imageObj) return 'https://placehold.co/300x300/181818/1db954?text=Artist';
+  if (!imageObj) return 'https://ik.imagekit.io/VibeCast/images/default-artist.jpg';
   if (typeof imageObj === 'string') {
-    if (imageObj === "[object Object]") return 'https://placehold.co/300x300/181818/1db954?text=Artist';
+    if (imageObj === "[object Object]") return 'https://ik.imagekit.io/VibeCast/images/default-artist.jpg';
     return imageObj;
   }
   if (Array.isArray(imageObj)) return imageObj[imageObj.length - 1]?.url || imageObj[imageObj.length - 1]?.link || imageObj[0]?.url;
-  return imageObj.url || imageObj.link || 'https://placehold.co/300x300/181818/1db954?text=Artist';
+  return imageObj.url || imageObj.link || 'https://ik.imagekit.io/VibeCast/images/default-artist.jpg';
 };
 
 const getValidAudio = (audioObj) => {
@@ -63,7 +62,6 @@ const ArtistPage = () => {
 
   useEffect(() => { window.scrollTo(0, 0); }, []);
 
-  // FIX 1: Fetch from LIVE JioSaavn instead of dead local MySQL DB!
   useEffect(() => {
     const fetchArtistDetails = async () => {
       try {
@@ -86,7 +84,6 @@ const ArtistPage = () => {
     fetchArtistDetails();
   }, [decodedArtistName]);
 
-  // FIX 2: Bulletproof image extraction
   let passedImage = location.state?.image;
   if (typeof passedImage === 'object') passedImage = getValidImage(passedImage);
   
@@ -95,7 +92,7 @@ const ArtistPage = () => {
     : (dbArtistData?.image_url || "https://ik.imagekit.io/VibeCast/images/default-artist.jpg");
 
   useEffect(() => {
-    if (!finalImage || finalImage.includes('placehold')) return;
+    if (!finalImage || finalImage.includes('placehold') || finalImage.includes('default')) return;
     const fac = new FastAverageColor();
     fac.getColorAsync(finalImage, { algorithm: 'dominant' })
       .then(color => setThemeDetails(prev => ({ ...prev, themeFrom: color.hex, themeAccent: color.isLight ? '#121212' : color.hex })))
@@ -103,7 +100,6 @@ const ArtistPage = () => {
     return () => fac.destroy();
   }, [finalImage]);
 
-  // Fetch Songs (Smart Deduplication)
   useEffect(() => {
     const fetchDynamicTracks = async () => {
       if (page === 1) setIsLoadingSongs(true);
@@ -158,7 +154,7 @@ const ArtistPage = () => {
     fetchDynamicTracks();
   }, [decodedArtistName, page]);
 
-  // Fetch Albums 
+  // SMART ALBUM FETCHER
   useEffect(() => {
     if (activeTab === "albums") {
       const fetchAlbums = async () => {
@@ -180,8 +176,12 @@ const ArtistPage = () => {
             for (const album of rawAlbums) {
               const albumName = (album.name || album.title || "").trim();
               const cleanAlbumName = albumName.toLowerCase();
-              const artistStr = (album.artists?.primary?.map(a => a.name).join(', ') || album.primaryArtists || "").toLowerCase();
-              const isAuthentic = artistStr === "" || artistStr.includes(decodedArtistName.toLowerCase());
+              
+              // FIX: A much safer authenticity check. Some endpoints put artists in subtitle or description.
+              const artistStr = (album.artists?.primary?.map(a => a.name).join(', ') || album.primaryArtists || album.subtitle || album.description || "").toLowerCase();
+              
+              // Only filter if we actually received a valid string, to prevent false positives blocking real albums
+              const isAuthentic = artistStr === "" || artistStr.includes(decodedArtistName.toLowerCase()) || decodedArtistName.toLowerCase().includes(artistStr.split(',')[0]);
 
               if (!seenAlbumNames.has(cleanAlbumName) && isAuthentic) {
                 seenAlbumNames.add(cleanAlbumName);
@@ -263,7 +263,6 @@ const ArtistPage = () => {
               </button>
             </div>
             <div className="flex gap-6">
-              {/* FIX 3: Preserving location.state when switching tabs! */}
               <button onClick={() => setSearchParams({ tab: "songs" }, { state: location.state, replace: true })} className={`font-bold text-base transition-colors pb-1 border-b-2 ${activeTab === "songs" ? "text-white border-[#1db954]" : "text-gray-400 border-transparent hover:text-white"}`}>
                 Popular Songs
               </button>
