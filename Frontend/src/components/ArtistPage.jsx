@@ -1,4 +1,4 @@
-import React, { useContext, useEffect, useState, useCallback } from "react";
+import React, { useContext, useEffect, useState, useCallback, useRef } from "react";
 import { useNavigate, useParams, useLocation, useSearchParams } from "react-router-dom";
 import { PlayerContext } from "../context/PlayerContext";
 import { MoreVertical, Disc } from "lucide-react";
@@ -201,31 +201,47 @@ const ArtistPage = () => {
     }
   }, [activeTab, decodedArtistName, albumPage, artistAlbums.length]);
 
-  // FIX 1: Smarter .includes() check instead of strictly equal
-  const isCurrentArtistPlaying = playlist?.length > 0 && 
-    playlist.some(song => song.artist?.toLowerCase().includes(decodedArtistName.toLowerCase()));
+
+  // FIX 1: Only check the CURRENTLY PLAYING song to see if the button should show Pause
+  const currentSong = playlist?.[currentSongIndex];
+  const isCurrentArtistPlaying = currentSong?.artist?.toLowerCase().includes(decodedArtistName.toLowerCase());
 
   const handlePlayPause = useCallback(() => {
-    if (!displaySongs.length) return;
-    if (!isCurrentArtistPlaying) playPlaylist(displaySongs, 0);
-    else playPause();
-    if (setMiniPlayerVisible) setMiniPlayerVisible(true);
+    if (!displaySongs || displaySongs.length === 0) return;
+    
+    // If THIS artist is currently active in the mini-player, just toggle pause/play
+    if (isCurrentArtistPlaying) {
+      if (playPause) playPause();
+    } else {
+      // Otherwise, overwrite the queue and start playing their catalog
+      if (playPlaylist) playPlaylist(displaySongs, 0, true);
+      if (setMiniPlayerVisible) setMiniPlayerVisible(true);
+    }
   }, [displaySongs, isCurrentArtistPlaying, playPlaylist, playPause, setMiniPlayerVisible]);
 
-  // FIX 2: Added Spacebar Listener
+
+  // FIX 2: Bulletproof Spacebar Listener using a Ref to bypass React audio re-renders!
+  const playPauseRef = useRef(handlePlayPause);
+  
+  // Keep the ref updated with the freshest function without triggering re-renders
+  useEffect(() => {
+    playPauseRef.current = handlePlayPause;
+  }, [handlePlayPause]);
+
   useEffect(() => {
     const handleKeyDown = (e) => {
-      // Prevent triggering if typing in a search bar elsewhere
+      // Don't trigger if typing in a search bar
       if (e.target.tagName === "INPUT" || e.target.tagName === "TEXTAREA") return;
       
-      if (e.code === "Space") {
-        e.preventDefault(); // Stop the page from scrolling down
-        handlePlayPause();
+      if (e.code === "Space" || e.key === " ") {
+        e.preventDefault(); // Stop page from scrolling down
+        playPauseRef.current();
       }
     };
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [handlePlayPause]);
+  }, []); // Empty array ensures it never detaches!
+
 
   const selectSong = useCallback((index) => {
     playPlaylist(displaySongs, index, true);
@@ -292,7 +308,7 @@ const ArtistPage = () => {
                 <div className="flex justify-center py-20"><div className="w-10 h-10 border-4 border-[#1db954] border-t-transparent rounded-full animate-spin"></div></div>
               ) : (
                 displaySongs.map((song, idx) => {
-                  const isCurrentSong = playlist.length > 0 && playlist[currentSongIndex]?.name === song.name;
+                  const isCurrentSong = currentSong?.id === song.id || currentSong?.name === song.name;
                   return (
                     <div key={idx} onClick={() => selectSong(idx)} className={`group grid grid-cols-[16px_48px_1fr_90px] items-center gap-4 px-2 py-2 rounded-md cursor-default transition duration-200 clear-bg-on-hover ${isCurrentSong ? "clear-bg-active text-white" : "text-gray-400"}`}>
                       <div className="font-medium text-sm text-center">
