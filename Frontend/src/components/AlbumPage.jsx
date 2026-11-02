@@ -59,13 +59,13 @@ const AlbumPage = () => {
     const fetchAlbumDetails = async () => {
       setIsLoading(true);
       try {
-        // FIX: Type-Aware API Routing (Playlist vs Album)
+        // CORRECTED: Type-Aware API Routing (Playlist vs Album) using YOUR backend
         const isPlaylist = location.state?.type === 'playlist';
         let data = {};
 
         if (isPlaylist) {
-          // It's a Top Chart / Playlist - fetch from Saavn's playlist endpoint
-          const res = await fetch(`https://saavn.dev/api/playlists?id=${finalAlbumId}`);
+          // It's a Top Chart / Playlist - fetch using your API_URL
+          const res = await fetch(`${API_URL}/api/playlists?id=${finalAlbumId}`);
           const json = await res.json();
           data = json.data || {};
         } else {
