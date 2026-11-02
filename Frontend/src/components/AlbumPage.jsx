@@ -1,4 +1,4 @@
-import React, { useContext, useEffect, useState, useCallback } from "react";
+import React, { useContext, useEffect, useState, useCallback, useRef } from "react";
 import { useNavigate, useParams, useLocation } from "react-router-dom";
 import { PlayerContext } from "../context/PlayerContext";
 import { MoreVertical, ArrowLeft, Clock } from "lucide-react";
@@ -13,11 +13,26 @@ const formatTime = (sec) => {
   return `${minutes}:${seconds}`;
 };
 
+const getValidImage = (imageObj) => {
+  if (!imageObj) return 'https://ik.imagekit.io/VibeCast/images/default-artist.jpg';
+  if (typeof imageObj === 'string') {
+    if (imageObj === "[object Object]") return 'https://ik.imagekit.io/VibeCast/images/default-artist.jpg';
+    return imageObj;
+  }
+  if (Array.isArray(imageObj)) return imageObj[imageObj.length - 1]?.url || imageObj[imageObj.length - 1]?.link || imageObj[0]?.url;
+  return imageObj.url || imageObj.link || 'https://ik.imagekit.io/VibeCast/images/default-artist.jpg';
+};
+
+const getValidAudio = (audioObj) => {
+  if (!audioObj) return '';
+  if (typeof audioObj === 'string') return audioObj;
+  if (Array.isArray(audioObj)) return audioObj[audioObj.length - 1]?.url || audioObj[audioObj.length - 1]?.link || audioObj[0]?.url;
+  return audioObj.url || audioObj.link || '';
+};
+
 const AlbumPage = () => {
   const navigate = useNavigate();
   const location = useLocation();
-  
-  // FIX: Safely grab the ID regardless of how App.jsx named the route parameter
   const { id, albumId } = useParams();
   const finalAlbumId = albumId || id;
 
@@ -44,7 +59,6 @@ const AlbumPage = () => {
     const fetchAlbumDetails = async () => {
       setIsLoading(true);
       try {
-        // FIX: Using the corrected finalAlbumId here!
         const res = await fetch(`${API_URL}/api/albums/${finalAlbumId}`);
         if (res.ok) {
           const data = await res.json();
@@ -53,7 +67,7 @@ const AlbumPage = () => {
           setAlbumInfo({
             title: rawAlbum.name || rawAlbum.title || location.state?.title || "Album",
             year: rawAlbum.year || rawAlbum.releaseDate?.substring(0, 4) || location.state?.year || "",
-            image: rawAlbum.image ? rawAlbum.image[rawAlbum.image.length - 1]?.url : location.state?.image || ""
+            image: getValidImage(rawAlbum.image) || location.state?.image
           });
 
           const songs = rawAlbum.songs || rawAlbum.list || [];
@@ -61,8 +75,8 @@ const AlbumPage = () => {
             id: song.id,
             name: song.name?.replace(/&quot;/g, '"'),
             artist: song.artists?.primary?.map(a => a.name).join(', ') || "Unknown Artist",
-            path: song.downloadUrl ? song.downloadUrl[song.downloadUrl.length - 1]?.url : '',
-            image: song.image ? song.image[song.image.length - 1]?.url : '',
+            path: getValidAudio(song.downloadUrl || song.url),
+            image: getValidImage(song.image),
             duration: formatTime(song.duration)
           }));
 
@@ -88,18 +102,42 @@ const AlbumPage = () => {
     return () => fac.destroy();
   }, [albumInfo.image]);
 
+  const currentSong = playlist?.[currentSongIndex];
+  // Check if the current song belongs to this album's list
+  const isCurrentAlbumPlaying = playlist && playlist.length > 0 && albumSongs.some(s => s.id === currentSong?.id);
+
   const handlePlayPause = useCallback(() => {
     if (!albumSongs.length) return;
-    const isCurrentAlbumPlaying = playlist && playlist.length > 0 && albumSongs.some(s => s.id === playlist[0]?.id);
     
-    if (!isCurrentAlbumPlaying) {
-      playPlaylist(albumSongs, 0, true);
+    if (isCurrentAlbumPlaying) {
+      if (playPause) playPause();
     } else {
-      playPause();
+      if (playPlaylist) playPlaylist(albumSongs, 0, true);
+      if (setMiniPlayerVisible) setMiniPlayerVisible(true);
     }
-    
-    if (setMiniPlayerVisible) setMiniPlayerVisible(true);
-  }, [albumSongs, playlist, playPlaylist, playPause, setMiniPlayerVisible]);
+  }, [albumSongs, isCurrentAlbumPlaying, playPlaylist, playPause, setMiniPlayerVisible]);
+
+  // Bulletproof Spacebar Listener for the Album Page
+  const playPauseRef = useRef(handlePlayPause);
+  
+  useEffect(() => {
+    playPauseRef.current = handlePlayPause;
+  }, [handlePlayPause]);
+
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if (e.target.tagName === "INPUT" || e.target.tagName === "TEXTAREA") return;
+      
+      if (e.code === "Space" || e.key === " ") {
+        if (e.repeat) return;
+        e.preventDefault(); 
+        e.stopImmediatePropagation(); 
+        if (playPauseRef.current) playPauseRef.current();
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown, { capture: true });
+    return () => window.removeEventListener("keydown", handleKeyDown, { capture: true });
+  }, []);
 
   return (
     <div className="min-h-screen text-white flex flex-col items-center bg-black pb-24 select-none cursor-default">
@@ -126,7 +164,7 @@ const AlbumPage = () => {
         <div className="max-w-5xl mx-auto">
           <div className="flex items-center mb-6">
             <button onClick={handlePlayPause} className="w-16 h-16 rounded-full bg-[#1db954] hover:bg-[#1ed760] text-black flex items-center justify-center shadow-lg hover:scale-105 transition-all duration-300 cursor-pointer">
-              {isPlaying && playlist.length > 0 && albumSongs.some(s => s.id === playlist[0]?.id) ? (
+              {isPlaying && isCurrentAlbumPlaying ? (
                 <svg className="w-8 h-8 fill-current" viewBox="0 0 24 24"><path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z" /></svg>
               ) : (
                 <svg className="w-8 h-8 fill-current pl-0.5" viewBox="0 0 24 24"><path d="M8 5v14l11-7z" /></svg>
@@ -145,17 +183,24 @@ const AlbumPage = () => {
             <div className="flex justify-center py-20"><div className="w-10 h-10 border-4 border-[#1db954] border-t-transparent rounded-full animate-spin"></div></div>
           ) : (
             albumSongs.map((song, idx) => {
-              const isCurrentSong = playlist.length > 0 && playlist[currentSongIndex]?.name === song.name;
+              const isCurrentSong = currentSong?.id === song.id || currentSong?.name === song.name;
               return (
                 <div key={idx} onClick={() => { playPlaylist(albumSongs, idx, true); if (setMiniPlayerVisible) setMiniPlayerVisible(true); }} className={`group grid grid-cols-[16px_48px_1fr_90px] items-center gap-4 px-2 py-2 rounded-md cursor-pointer transition duration-200 clear-bg-on-hover ${isCurrentSong ? "clear-bg-active text-white" : "text-gray-400"}`}>
                   
-                  <div className="font-medium text-sm text-center">
+                  {/* The Animated Equalizer GIF logic added here! */}
+                  <div className="font-medium text-sm text-center flex justify-center items-center">
                     {isCurrentSong && isPlaying ? (
-                      <span className="text-[#1db954] animate-pulse"><svg className="w-4 h-4 mx-auto" fill="currentColor" viewBox="0 0 24 24"><path d="M7 19v-14h3v14h-3zm8 0V5h3v14h-3z" /></svg></span>
+                      <img 
+                        src="https://ik.imagekit.io/vibecast/images/equaliser-animated-green.f93a2ef4.gif" 
+                        alt="Playing" 
+                        className="w-4 h-4" 
+                      />
                     ) : (
                       <span className="group-hover:hidden">{idx + 1}</span>
                     )}
-                    <svg className="w-4 h-4 hidden group-hover:block text-white" fill="currentColor" viewBox="0 0 24 24"><path d="M8 5v14l11-7z" /></svg>
+                    {!(isCurrentSong && isPlaying) && (
+                      <svg className="w-4 h-4 hidden group-hover:block text-white" fill="currentColor" viewBox="0 0 24 24"><path d="M8 5v14l11-7z" /></svg>
+                    )}
                   </div>
                   
                   <img src={song.image} alt={song.name} className="w-12 h-12 object-cover rounded shadow-md pointer-events-none" />
