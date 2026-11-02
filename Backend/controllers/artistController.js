@@ -1,12 +1,12 @@
 import * as artistService from '../services/artistService.js';
 
+// --- DATABASE FUNCTIONS ---
 export const addArtist = async (req, res) => {
     const { name, image_url, quote } = req.body; 
     try {
         const result = await artistService.createArtist(name, image_url, quote); 
         res.status(201).json({ id: result.insertId, name, image_url, quote });
     } catch (err) {
-        console.error("Database error:", err);
         res.status(500).json({ error: 'Failed to add artist' });
     }
 };
@@ -39,6 +39,30 @@ export const deleteArtist = async (req, res) => {
     }
 };
 
+// --- HELPER: EXACT ARTIST ID MATCHER ---
+// Prevents grabbing the wrong artist if their first name matches someone else!
+const getExactArtistId = (results, queryName) => {
+    if (!results || results.length === 0) return null;
+    const target = queryName.toLowerCase().trim();
+    
+    // 1. Try for an exact match first
+    const exact = results.find(a => (a.title || a.name || "").toLowerCase().trim() === target);
+    if (exact) return exact.id;
+
+    // 2. Try ignoring special characters (e.g., "A.R. Rahman" vs "AR Rahman")
+    const partial = results.find(a => {
+        const name = (a.title || a.name || "").toLowerCase();
+        return name.replace(/[^a-z0-9]/g, '') === target.replace(/[^a-z0-9]/g, '');
+    });
+    if (partial) return partial.id;
+
+    // 3. Ultimate fallback
+    return results[0].id;
+};
+
+
+// --- LIVE API ROUTES ---
+
 // HYBRID ROUTE: Top Hits on Page 1, Deep Catalog on Page 2+
 export const fetchArtistCatalog = async (req, res) => {
     const { name, page = 1 } = req.query;
@@ -46,21 +70,18 @@ export const fetchArtistCatalog = async (req, res) => {
     
     try {
         if (parseInt(page) === 1) {
-            // PAGE 1: Use Search API to guarantee "All-Time Hits" & "Trending" are at the top
             const searchRes = await fetch(`${SAAVN_API}/search/songs?query=${encodeURIComponent(name)}&limit=40`);
             const searchJson = await searchRes.json();
             return res.json(searchJson);
         } else {
-            // PAGE 2+: Use Artist Catalog API to fetch the rest of their discography one by one
             const artistRes = await fetch(`${SAAVN_API}/search/artists?query=${encodeURIComponent(name)}`);
             const artistJson = await artistRes.json();
-            const artistId = artistJson.data?.results?.[0]?.id;
+            
+            // FIX: Use strict exact matcher
+            const artistId = getExactArtistId(artistJson.data?.results, name);
 
-            if (!artistId) {
-                return res.json({ data: { songs: [] } });
-            }
+            if (!artistId) return res.json({ data: { songs: [] } });
 
-            // We subtract 1 so the catalog starts from its true beginning
             const targetPage = parseInt(page) - 1;
             const songsRes = await fetch(`${SAAVN_API}/artists/${artistId}/songs?page=${targetPage}`);
             const songsJson = await songsRes.json();
@@ -73,14 +94,16 @@ export const fetchArtistCatalog = async (req, res) => {
     }
 };
 
-// LIVE API ROUTE: Fetch Artist's Albums (Paginated)
 export const fetchArtistAlbums = async (req, res) => {
     const { name, page = 1 } = req.query;
     const SAAVN_API = process.env.SAAVN_API_URL; 
+    
     try {
         const artistRes = await fetch(`${SAAVN_API}/search/artists?query=${encodeURIComponent(name)}`);
         const artistJson = await artistRes.json();
-        const artistId = artistJson.data?.results?.[0]?.id;
+        
+        // FIX: Use strict exact matcher here too!
+        const artistId = getExactArtistId(artistJson.data?.results, name);
 
         if (!artistId) return res.json({ data: { albums: [] } });
 
@@ -88,31 +111,30 @@ export const fetchArtistAlbums = async (req, res) => {
         const albumsJson = await albumsRes.json();
         res.json(albumsJson);
     } catch (error) {
+        console.error("Albums Error:", error);
         res.status(500).json({ error: "Failed to fetch artist albums" });
     }
 };
+
 export const searchLiveArtists = async (req, res) => {
     const { query } = req.query;
     const SAAVN_API = process.env.SAAVN_API_URL; 
     
     try {
         if (!query) return res.json({ data: { results: [] } });
-        
         const response = await fetch(`${SAAVN_API}/search/artists?query=${encodeURIComponent(query)}`);
         const data = await response.json();
-        
         res.json(data);
     } catch (error) {
         console.error("Live Artist Search Error:", error);
         res.status(500).json({ error: "Failed to search live artists" });
     }
 };
-// NEW: Fetch dynamic default artists for the Discover page
+
 export const fetchDefaultArtists = async (req, res) => {
     const SAAVN_API = process.env.SAAVN_API_URL; 
     
     try {
-        // Helper to safely fetch from JioSaavn
         const fetchSafe = async (url) => {
             try { 
                 const response = await fetch(url); 
@@ -120,7 +142,6 @@ export const fetchDefaultArtists = async (req, res) => {
             } catch (e) { return { data: { results: [] } }; }
         };
 
-        // Fetch top artists across 3 major streaming categories simultaneously
         const [hindiRes, englishRes, punjabiRes] = await Promise.all([
             fetchSafe(`${SAAVN_API}/search/artists?query=hindi&limit=15`),
             fetchSafe(`${SAAVN_API}/search/artists?query=english&limit=15`),
@@ -148,9 +169,7 @@ export const fetchDefaultArtists = async (req, res) => {
             }
         }
 
-        // Shuffle the array so the Discover page looks different every time!
         const shuffled = uniqueArtists.sort(() => 0.5 - Math.random()).slice(0, 18);
-        
         res.json({ data: shuffled });
     } catch (error) {
         console.error("Default Artists Error:", error);
