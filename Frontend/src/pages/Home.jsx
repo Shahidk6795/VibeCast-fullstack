@@ -29,7 +29,24 @@ const genreAmbience = {
   "Lo-Fi": "from-indigo-900/40 via-black to-black"
 };
 
-// 4. FEATURE: Helper to detect "NEW" releases (uploaded within last 30 days)
+// FIX 1: Safety helpers added for Home page robustness
+const getValidImage = (imageObj) => {
+  if (!imageObj) return 'https://ik.imagekit.io/vibecast/images/default-artist.jpg';
+  if (typeof imageObj === 'string') {
+    if (imageObj === "[object Object]") return 'https://ik.imagekit.io/vibecast/images/default-artist.jpg';
+    return imageObj;
+  }
+  if (Array.isArray(imageObj)) return imageObj[imageObj.length - 1]?.url || imageObj[imageObj.length - 1]?.link || imageObj[0]?.url;
+  return imageObj.url || imageObj.link || 'https://ik.imagekit.io/vibecast/images/default-artist.jpg';
+};
+
+const getValidAudio = (audioObj) => {
+  if (!audioObj) return '';
+  if (typeof audioObj === 'string') return audioObj;
+  if (Array.isArray(audioObj)) return audioObj[audioObj.length - 1]?.url || audioObj[audioObj.length - 1]?.link || audioObj[0]?.url;
+  return audioObj.url || audioObj.link || '';
+};
+
 const isNewRelease = (dateString) => {
   if (!dateString) return false;
   const trackDate = new Date(dateString);
@@ -46,16 +63,13 @@ const Home = () => {
   const [homeArtists, setHomeArtists] = useState([]); 
   const [activeGenre, setActiveGenre] = useState("All");
   
-  // 3. FEATURE: Recently Played State
   const [recentlyPlayed, setRecentlyPlayed] = useState([]);
 
   const { user } = useUser();
   const navigate = useNavigate();
   
-  // Pull current track state from PlayerContext
   const { playPlaylist, currentTrack, isPlaying } = useContext(PlayerContext) || {};
 
-  // Load Recently Played from localStorage on mount
   useEffect(() => {
     const savedRecents = localStorage.getItem('vibecast_recently_played');
     if (savedRecents) {
@@ -67,7 +81,6 @@ const Home = () => {
     }
   }, []);
 
-  // Record a track to Recently Played history
   const trackPlayed = useCallback((trackObj) => {
     setRecentlyPlayed((prev) => {
       const filtered = prev.filter((t) => t.name !== trackObj.name);
@@ -101,22 +114,25 @@ const Home = () => {
     }
   }, []);
 
+  // FIX 2: Wired directly to your Dynamic JioSaavn Route instead of local DB
   const fetchArtists = useCallback(async () => {
     try {
-      const response = await fetch(`${API_URL}/api/artists`);
+      const response = await fetch(`${API_URL}/api/artists/default`);
       if (response.ok) {
         const data = await response.json();
-        const formattedArtists = data.map(artist => ({
+        const formattedArtists = (data.data || []).map(artist => ({
           name: artist.name,
-          image: artist.image_url || "https://placehold.co/400x400/181818/ffffff?text=No+Image", 
+          image: getValidImage(artist.image), 
           path: `/artist/${encodeURIComponent(artist.name)}`
         }));
+        
+        // Final shuffle before setting to state
         const shuffled = formattedArtists.sort(() => 0.5 - Math.random());
         setAllArtists(shuffled);
         setHomeArtists(shuffled);
       }
     } catch (error) {
-      console.error('Error fetching artists:', error);
+      console.error('Error fetching live artists:', error);
     }
   }, []);
 
@@ -155,7 +171,6 @@ const Home = () => {
     }
   };
 
-  // SPOTIFY-STYLE: 2-Hour Rotating Thematic Mixes
   const generatedMixes = useMemo(() => {
     if (allTracks.length === 0) return [];
     
@@ -180,7 +195,7 @@ const Home = () => {
         const shuffled = [...relatedTracks].sort(() => 0.5 - Math.random());
         
         const playlistTracks = shuffled.slice(0, 15).map(t => ({
-          name: t.title, artist: t.artist, path: t.audio_url, image: t.cover_url
+          name: t.title, artist: t.artist, path: getValidAudio(t.audio_url), image: getValidImage(t.cover_url)
         }));
 
         const uniqueArtists = [...new Set(playlistTracks.map(t => t.artist))];
@@ -212,14 +227,12 @@ const Home = () => {
   return (
     <div className="relative w-full min-h-screen text-white overflow-x-hidden bg-black transition-colors duration-700">
       
-      {/* 1. DYNAMIC VIBE-SHIFTING AMBIENT GLOW BACKGROUND */}
       <div className={`fixed inset-0 z-0 bg-gradient-to-b ${genreAmbience[activeGenre] || genreAmbience["All"]} transition-all duration-1000 ease-in-out`}>
         <Hyperspeed intensity={0.4} colorShift={true} trailLength={50} speed={0.7} />
       </div>
 
       <div className="relative z-10 p-6 md:p-8 pt-4 min-h-screen pb-32 max-w-7xl mx-auto">
         
-        {/* REFINED GREETING & GENRE PILLS */}
         <header className="mb-10 pt-4">
           <div className="flex items-center gap-3 mb-6">
             <GreetingIcon className={`w-8 h-8 md:w-10 md:h-10 ${greeting.color} drop-shadow-md`} />
@@ -245,7 +258,6 @@ const Home = () => {
           </div>
         </header>
 
-        {/* 3. FEATURE: RECENTLY PLAYED ROW */}
         {recentlyPlayed.length > 0 && (
           <section className="mb-12">
             <h2 className="text-2xl font-bold mb-4 text-white flex items-center gap-2">
@@ -273,7 +285,6 @@ const Home = () => {
           </section>
         )}
 
-        {/* HERO ARTIST SPOTLIGHT */}
         {featuredArtist && (
           <section className="mb-14 relative rounded-3xl overflow-hidden h-64 md:h-80 group cursor-pointer shadow-2xl border border-white/10" onClick={() => handleArtistClick(featuredArtist)}>
             <div className="absolute inset-0 bg-black">
@@ -296,7 +307,6 @@ const Home = () => {
           </section>
         )}
 
-        {/* GLOBAL TOP 5 */}
         {dbTracks.length > 0 && (
           <section className="mb-14">
             <h2 className="text-2xl font-bold mb-5 text-white flex items-center gap-2">
@@ -306,7 +316,7 @@ const Home = () => {
             <div className="flex gap-4 overflow-x-auto pb-4 scrollbar-hide snap-x">
               {dbTracks.slice(0, 5).map((track, idx) => {
                 const isCurrentlyPlaying = currentTrack?.name === track.title && isPlaying;
-                const formatted = { name: track.title, artist: track.artist, path: track.audio_url, image: track.cover_url };
+                const formatted = { name: track.title, artist: track.artist, path: getValidAudio(track.audio_url), image: getValidImage(track.cover_url) };
                 
                 return (
                   <div
@@ -317,13 +327,16 @@ const Home = () => {
                     }}
                     className="snap-start relative group flex items-center gap-4 p-3 rounded-2xl bg-white/5 hover:bg-white/10 border border-white/5 hover:border-white/20 transition-all duration-300 cursor-pointer backdrop-blur-md shadow-lg flex-shrink-0 w-[260px] sm:w-[320px] hover:-translate-y-1"
                   >
-                    {/* 2. FEATURE: ANIMATED NOW-PLAYING EQUALIZER OR NUMBER */}
+                    
+                    {/* FIX 3: Replaced the CSS Animation with your sleek ImageKit GIF! */}
                     <div className="absolute -left-1 top-1/2 -translate-y-1/2 z-0 pointer-events-none">
                       {isCurrentlyPlaying ? (
-                        <div className="flex items-end gap-1 h-8 pl-3 opacity-90">
-                          <span className="w-1.5 bg-[#1db954] animate-bounce h-full rounded-full"></span>
-                          <span className="w-1.5 bg-[#1db954] animate-bounce [animation-delay:0.2s] h-3/4 rounded-full"></span>
-                          <span className="w-1.5 bg-[#1db954] animate-bounce [animation-delay:0.4s] h-1/2 rounded-full"></span>
+                        <div className="flex items-center h-8 pl-3 opacity-90">
+                          <img 
+                            src="https://ik.imagekit.io/vibecast/images/equaliser-animated-green.f93a2ef4.gif" 
+                            alt="Playing" 
+                            className="w-5 h-5" 
+                          />
                         </div>
                       ) : (
                         <span className="text-6xl font-black text-white/5 group-hover:text-[#1db954]/10 transition-colors">
@@ -332,10 +345,9 @@ const Home = () => {
                       )}
                     </div>
 
-                    <div className="relative w-14 h-14 sm:w-16 sm:h-16 rounded-xl overflow-hidden shadow-md bg-black z-10 flex-shrink-0">
-                      <img src={track.cover_url} alt={track.title} className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110" />
+                    <div className="relative w-14 h-14 sm:w-16 sm:h-16 rounded-xl overflow-hidden shadow-md bg-black z-10 flex-shrink-0 ml-4">
+                      <img src={formatted.image} alt={track.title} className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110" />
                       
-                      {/* 4. FEATURE: NEW RELEASE BADGE */}
                       {isNewRelease(track.created_at) && (
                         <span className="absolute top-1 left-1 bg-gradient-to-r from-red-600 to-pink-600 text-white text-[9px] font-black px-1.5 py-0.5 rounded-md shadow-md uppercase tracking-wider z-20 flex items-center gap-0.5">
                           <Flame className="w-2.5 h-2.5 fill-white" /> NEW
@@ -360,7 +372,6 @@ const Home = () => {
           </section>
         )}
 
-        {/* MADE FOR YOU (THEMATIC MIXES) */}
         {generatedMixes.length > 0 && (
           <section className="mb-14">
             <h2 className="text-2xl font-bold mb-5 text-white hover:text-[#1db954] transition-colors duration-300">
@@ -398,7 +409,6 @@ const Home = () => {
           </section>
         )}
 
-        {/* YOUR LIBRARY */}
         <section className="mb-14">
           <h2 className="text-2xl font-bold mb-5 text-white hover:text-[#1db954] transition-colors duration-300">
             Your Library
@@ -409,7 +419,6 @@ const Home = () => {
           </div>
         </section>
 
-        {/* SELECT YOUR VIBE */}
         <section className="mb-14">
           <h2 className="text-2xl font-bold mb-5 text-white hover:text-[#1db954] transition-colors duration-300">
             Select Your Vibe
@@ -427,7 +436,6 @@ const Home = () => {
           </div>
         </section>
 
-        {/* TICKER CATEGORIES */}
         {categories.map((category, index) => (
           <section key={index} className="mb-12 overflow-hidden relative">
             <h2 className="text-2xl font-bold mb-5 hover:underline text-[#1db954] transition-colors duration-300">
