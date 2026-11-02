@@ -65,7 +65,7 @@ const AlbumPage = () => {
 
         if (isPlaylist) {
           // It's a Top Chart / Playlist - fetch using your API_URL
-          const res = await fetch(`${API_URL}/api/playlists?id=${finalAlbumId}`);
+          const res = await fetch(`${API_URL}/api/artists/playlists?id=${finalAlbumId}`);
           const json = await res.json();
           data = json.data || {};
         } else {
