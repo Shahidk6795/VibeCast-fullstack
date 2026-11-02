@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useContext, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useContext, useCallback, useMemo, useRef } from 'react';
 import { useUser } from "@clerk/clerk-react";
 import { useNavigate } from "react-router-dom";
 import { PlayerContext } from "../context/PlayerContext";
@@ -82,17 +82,27 @@ const LikedSongsPage = () => {
     if (setMiniPlayerVisible) setMiniPlayerVisible(true);
   }, [formattedSongs, playlist, playPlaylist, playPause, setMiniPlayerVisible]);
 
+  // FIX: Bulletproof Spacebar Listener (prevents double-trigger with mini-player)
+  const playPauseRef = useRef(handlePlayPause);
+  
+  useEffect(() => {
+    playPauseRef.current = handlePlayPause;
+  }, [handlePlayPause]);
+
   useEffect(() => {
     const handleKeyDown = (event) => {
-      if (event.code === "Space" && document.activeElement.tagName !== "INPUT") {
+      if (event.target.tagName === "INPUT" || event.target.tagName === "TEXTAREA") return;
+      
+      if (event.code === "Space" || event.key === " ") {
+        if (event.repeat) return;
         event.preventDefault();
         event.stopImmediatePropagation();
-        handlePlayPause();
+        if (playPauseRef.current) playPauseRef.current();
       }
     };
-    window.addEventListener("keydown", handleKeyDown, true);
-    return () => window.removeEventListener("keydown", handleKeyDown, true);
-  }, [playlist, handlePlayPause]);
+    window.addEventListener("keydown", handleKeyDown, { capture: true });
+    return () => window.removeEventListener("keydown", handleKeyDown, { capture: true });
+  }, []);
 
   const handlePlaySingle = (index) => {
     playPlaylist(formattedSongs, index, true);
@@ -184,16 +194,19 @@ const LikedSongsPage = () => {
                 onClick={() => handlePlaySingle(index)}
                 className={`group grid grid-cols-[16px_48px_1fr_60px_80px] items-center gap-4 px-2 py-2 rounded-md cursor-default transition duration-200 hover:bg-white/10 ${isCurrentSong ? 'bg-white/5 text-white' : 'text-gray-400'}`}
               >
-                <div className="text-center font-medium text-sm">
+                {/* FIX: Animated Equalizer GIF injected here */}
+                <div className="text-center font-medium text-sm flex justify-center items-center">
                   {isCurrentSong && isPlaying ? (
-                    <span className="text-[#1db954] animate-pulse">
-                      <svg className="w-4 h-4 mx-auto" fill="currentColor" viewBox="0 0 24 24"><path d="M7 19v-14h3v14h-3zm8 0V5h3v14h-3z" /></svg>
-                    </span>
+                    <img 
+                      src="https://ik.imagekit.io/vibecast/images/equaliser-animated-green.f93a2ef4.gif" 
+                      alt="Playing" 
+                      className="w-4 h-4 mx-auto" 
+                    />
                   ) : (
-                    <>
-                      <span className="group-hover:hidden">{index + 1}</span>
-                      <svg className="w-4 h-4 hidden group-hover:block text-white mx-auto" fill="currentColor" viewBox="0 0 24 24"><path d="M8 5v14l11-7z" /></svg>
-                    </>
+                    <span className="group-hover:hidden">{index + 1}</span>
+                  )}
+                  {!(isCurrentSong && isPlaying) && (
+                    <svg className="w-4 h-4 hidden group-hover:block text-white mx-auto" fill="currentColor" viewBox="0 0 24 24"><path d="M8 5v14l11-7z" /></svg>
                   )}
                 </div>
 
