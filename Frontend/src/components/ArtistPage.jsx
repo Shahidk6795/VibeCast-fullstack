@@ -154,7 +154,6 @@ const ArtistPage = () => {
     fetchDynamicTracks();
   }, [decodedArtistName, page]);
 
-  // SMART ALBUM FETCHER
   useEffect(() => {
     if (activeTab === "albums") {
       const fetchAlbums = async () => {
@@ -177,13 +176,7 @@ const ArtistPage = () => {
               const albumName = (album.name || album.title || "").trim();
               const cleanAlbumName = albumName.toLowerCase();
               
-              // FIX: A much safer authenticity check. Some endpoints put artists in subtitle or description.
-              const artistStr = (album.artists?.primary?.map(a => a.name).join(', ') || album.primaryArtists || album.subtitle || album.description || "").toLowerCase();
-              
-              // Only filter if we actually received a valid string, to prevent false positives blocking real albums
-              const isAuthentic = artistStr === "" || artistStr.includes(decodedArtistName.toLowerCase()) || decodedArtistName.toLowerCase().includes(artistStr.split(',')[0]);
-
-              if (!seenAlbumNames.has(cleanAlbumName) && isAuthentic) {
+              if (!seenAlbumNames.has(cleanAlbumName)) {
                 seenAlbumNames.add(cleanAlbumName);
                 uniqueAlbums.push({
                   id: album.id,
@@ -208,13 +201,31 @@ const ArtistPage = () => {
     }
   }, [activeTab, decodedArtistName, albumPage, artistAlbums.length]);
 
+  // FIX 1: Smarter .includes() check instead of strictly equal
+  const isCurrentArtistPlaying = playlist?.length > 0 && 
+    playlist.some(song => song.artist?.toLowerCase().includes(decodedArtistName.toLowerCase()));
+
   const handlePlayPause = useCallback(() => {
     if (!displaySongs.length) return;
-    const isCurrentArtistPlaying = playlist && playlist.length > 0 && playlist.some(song => song.artist === decodedArtistName);
     if (!isCurrentArtistPlaying) playPlaylist(displaySongs, 0);
     else playPause();
     if (setMiniPlayerVisible) setMiniPlayerVisible(true);
-  }, [displaySongs, playlist, decodedArtistName, playPlaylist, playPause, setMiniPlayerVisible]);
+  }, [displaySongs, isCurrentArtistPlaying, playPlaylist, playPause, setMiniPlayerVisible]);
+
+  // FIX 2: Added Spacebar Listener
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      // Prevent triggering if typing in a search bar elsewhere
+      if (e.target.tagName === "INPUT" || e.target.tagName === "TEXTAREA") return;
+      
+      if (e.code === "Space") {
+        e.preventDefault(); // Stop the page from scrolling down
+        handlePlayPause();
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [handlePlayPause]);
 
   const selectSong = useCallback((index) => {
     playPlaylist(displaySongs, index, true);
@@ -252,7 +263,7 @@ const ArtistPage = () => {
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-8 border-b border-gray-800 pb-4">
             <div className="flex items-center">
               <button onClick={handlePlayPause} className="w-16 h-16 rounded-full bg-[#1db954] hover:bg-[#1ed760] text-black flex items-center justify-center shadow-lg hover:scale-105 transition-all duration-300 cursor-pointer">
-                {isPlaying && playlist.length > 0 && playlist.some(song => song.artist === decodedArtistName) ? (
+                {isPlaying && isCurrentArtistPlaying ? (
                   <svg className="w-8 h-8 fill-current" viewBox="0 0 24 24"><path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z" /></svg>
                 ) : (
                   <svg className="w-8 h-8 fill-current pl-0.5" viewBox="0 0 24 24"><path d="M8 5v14l11-7z" /></svg>
