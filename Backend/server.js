@@ -30,8 +30,18 @@ if (!fs.existsSync('uploads')) {
 
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
+// UPGRADED: Master Chain-Ping Route (wakes both VibeCast & JioSaavn API)
 app.get('/', (_req, res) => {
-  res.status(200).send("VibeCast API is awake and running!");
+  // 1. Reply immediately so cron-job.org never times out or disables your job
+  res.status(200).send("VibeCast API is awake and triggering JioSaavn!");
+
+  // 2. Wake up the JioSaavn Render service in the background
+  const apiUrl = process.env.SAAVN_API_URL;
+  if (apiUrl) {
+    axios.get(`${apiUrl}/search/songs?query=arijit&limit=1`)
+      .then(() => console.log("Keep-Alive: JioSaavn API is awake!"))
+      .catch((err) => console.log("Keep-Alive ping sent to JioSaavn:", err.message));
+  }
 });
 
 app.get('/api/search', async (req, res) => {
