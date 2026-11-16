@@ -1,5 +1,9 @@
 import * as artistService from '../services/artistService.js';
 
+// In-memory TTL cache for homepage modules (15 minutes)
+let modulesCache = { data: null, expiresAt: 0 };
+const MODULES_CACHE_TTL = 15 * 60 * 1000;
+
 // --- DATABASE FUNCTIONS ---
 export const addArtist = async (req, res) => {
     const { name, image_url, quote } = req.body; 
@@ -174,10 +178,15 @@ export const fetchDefaultArtists = async (req, res) => {
     }
 };
 
-// UPGRADED: Live 2026 Dynamic Home Modules Fetcher (Trending, New Releases & Top Charts)
+// UPGRADED: Live Dynamic Home Modules Fetcher with 15-Minute In-Memory Cache
 export const fetchHomeModules = async (req, res) => {
     const SAAVN_API = process.env.SAAVN_API_URL; 
     try {
+        // Return cached modules immediately if still fresh
+        if (modulesCache.data && Date.now() < modulesCache.expiresAt) {
+            return res.json(modulesCache.data);
+        }
+
         const currentYear = new Date().getFullYear();
 
         // 1. Fetch live editorial playlists + fresh current-year album searches in parallel
@@ -189,7 +198,7 @@ export const fetchHomeModules = async (req, res) => {
             fetch(`${SAAVN_API}/search/playlists?query=top charts india&limit=12`).then(r => r.json()).catch(() => ({}))
         ]);
 
-        // 2. Extract real live trending albums from JioSaavn's own "Trending Today" editorial playlist!
+        // 2. Extract real live trending albums from JioSaavn's "Trending Today" editorial playlist
         let liveTrendingAlbums = [];
         const topTrendingPlaylistId = trendingPlaylistSearch?.data?.results?.[0]?.id;
         if (topTrendingPlaylistId) {
@@ -234,7 +243,6 @@ export const fetchHomeModules = async (req, res) => {
             }
         }
 
-        // Sort newest year first, with slight randomization within the same year so it stays lively
         freshReleases.sort((a, b) => {
             const yearDiff = Number(b.year || 0) - Number(a.year || 0);
             return yearDiff !== 0 ? yearDiff : 0.5 - Math.random();
@@ -250,13 +258,20 @@ export const fetchHomeModules = async (req, res) => {
             }
         }
 
-        return res.json({
+        const responsePayload = {
             data: {
                 trending: { albums: liveTrendingAlbums.slice(0, 12) },
                 albums: freshReleases.slice(0, 12),
                 charts: chartsRes?.data?.results || []
             }
-        });
+        };
+
+        modulesCache = {
+            data: responsePayload,
+            expiresAt: Date.now() + MODULES_CACHE_TTL
+        };
+
+        return res.json(responsePayload);
     } catch (error) {
         console.error("Home Modules Error:", error);
         res.status(500).json({ error: "Failed to fetch home modules" });
