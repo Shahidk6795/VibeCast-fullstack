@@ -1,8 +1,9 @@
 import * as artistService from '../services/artistService.js';
 
-// In-memory TTL cache for homepage modules (15 minutes)
+// In-memory TTL caches (15 minutes)
 let modulesCache = { data: null, expiresAt: 0 };
-const MODULES_CACHE_TTL = 15 * 60 * 1000;
+let defaultArtistsCache = { data: null, expiresAt: 0 };
+const CACHE_TTL = 15 * 60 * 1000;
 
 // --- DATABASE FUNCTIONS ---
 export const addArtist = async (req, res) => {
@@ -132,45 +133,72 @@ export const searchLiveArtists = async (req, res) => {
     }
 };
 
+// UPGRADED: Verified Default Artists Roster (Eliminates fake/fan profiles & empty avatars)
 export const fetchDefaultArtists = async (req, res) => {
     const SAAVN_API = process.env.SAAVN_API_URL; 
     
     try {
-        const fetchSafe = async (url) => {
-            try { 
-                const response = await fetch(url); 
-                return await response.json(); 
-            } catch (e) { return { data: { results: [] } }; }
-        };
+        let verifiedPool = defaultArtistsCache.data;
 
-        const [hindiRes, englishRes, punjabiRes] = await Promise.all([
-            fetchSafe(`${SAAVN_API}/search/artists?query=hindi&limit=15`),
-            fetchSafe(`${SAAVN_API}/search/artists?query=english&limit=15`),
-            fetchSafe(`${SAAVN_API}/search/artists?query=punjabi&limit=15`)
-        ]);
+        if (!verifiedPool || Date.now() >= defaultArtistsCache.expiresAt) {
+            const verifiedArtistRoster = [
+                "Arijit Singh", "Pritam", "Shreya Ghoshal", "A.R. Rahman",
+                "Anirudh Ravichander", "Diljit Dosanjh", "Karan Aujla", "AP Dhillon",
+                "Badshah", "Divine", "KR$NA", "Anuv Jain",
+                "Jubin Nautiyal", "Atif Aslam", "Sonu Nigam", "Sunidhi Chauhan",
+                "Vishal Mishra", "Sachin-Jigar", "Amit Trivedi", "Darshan Raval",
+                "The Weeknd", "Taylor Swift", "Drake", "Dua Lipa"
+            ];
 
-        const rawArtists = [
-            ...(hindiRes.data?.results || []),
-            ...(englishRes.data?.results || []),
-            ...(punjabiRes.data?.results || [])
-        ];
+            const fetchSafe = async (artistName) => {
+                try { 
+                    const response = await fetch(`${SAAVN_API}/search/artists?query=${encodeURIComponent(artistName)}&limit=5`); 
+                    const json = await response.json();
+                    const results = json.data?.results || [];
+                    if (results.length === 0) return null;
 
-        const uniqueArtists = [];
-        const seen = new Set();
+                    const exactId = getExactArtistId(results, artistName);
+                    const matched = results.find(a => a.id === exactId) || results[0];
 
-        for (const artist of rawArtists) {
-            if (!seen.has(artist.id) && artist.image) {
-                seen.add(artist.id);
-                uniqueArtists.push({
-                    id: artist.id,
-                    name: artist.title || artist.name,
-                    image: artist.image,
-                    genre: artist.description || artist.role || "Trending Artist"
-                });
+                    const imgStr = Array.isArray(matched.image)
+                        ? (matched.image[matched.image.length - 1]?.url || matched.image[matched.image.length - 1]?.link || "")
+                        : (matched.image?.url || matched.image || "");
+
+                    if (!imgStr || imgStr.includes("default") || imgStr.includes("placeholder")) {
+                        return null;
+                    }
+
+                    return {
+                        id: matched.id,
+                        name: matched.title || matched.name || artistName,
+                        image: matched.image,
+                        genre: matched.description || matched.role || "Verified Artist"
+                    };
+                } catch {
+                    return null;
+                }
+            };
+
+            const resolved = await Promise.all(verifiedArtistRoster.map(fetchSafe));
+
+            const uniqueArtists = [];
+            const seen = new Set();
+
+            for (const artist of resolved) {
+                if (artist && !seen.has(artist.id)) {
+                    seen.add(artist.id);
+                    uniqueArtists.push(artist);
+                }
             }
+
+            verifiedPool = uniqueArtists;
+            defaultArtistsCache = {
+                data: verifiedPool,
+                expiresAt: Date.now() + CACHE_TTL
+            };
         }
 
-        const shuffled = uniqueArtists.sort(() => 0.5 - Math.random()).slice(0, 18);
+        const shuffled = [...verifiedPool].sort(() => 0.5 - Math.random()).slice(0, 18);
         res.json({ data: shuffled });
     } catch (error) {
         console.error("Default Artists Error:", error);
@@ -182,14 +210,12 @@ export const fetchDefaultArtists = async (req, res) => {
 export const fetchHomeModules = async (req, res) => {
     const SAAVN_API = process.env.SAAVN_API_URL; 
     try {
-        // Return cached modules immediately if still fresh
         if (modulesCache.data && Date.now() < modulesCache.expiresAt) {
             return res.json(modulesCache.data);
         }
 
         const currentYear = new Date().getFullYear();
 
-        // 1. Fetch live editorial playlists + fresh current-year album searches in parallel
         const [trendingPlaylistSearch, hindiYearRes, punjabiYearRes, englishYearRes, chartsRes] = await Promise.all([
             fetch(`${SAAVN_API}/search/playlists?query=${encodeURIComponent(`Trending Today ${currentYear}`)}&limit=3`).then(r => r.json()).catch(() => ({})),
             fetch(`${SAAVN_API}/search/albums?query=${encodeURIComponent(`hindi ${currentYear}`)}&limit=20`).then(r => r.json()).catch(() => ({})),
@@ -198,7 +224,6 @@ export const fetchHomeModules = async (req, res) => {
             fetch(`${SAAVN_API}/search/playlists?query=top charts india&limit=12`).then(r => r.json()).catch(() => ({}))
         ]);
 
-        // 2. Extract real live trending albums from JioSaavn's "Trending Today" editorial playlist
         let liveTrendingAlbums = [];
         const topTrendingPlaylistId = trendingPlaylistSearch?.data?.results?.[0]?.id;
         if (topTrendingPlaylistId) {
@@ -227,7 +252,6 @@ export const fetchHomeModules = async (req, res) => {
             }
         }
 
-        // 3. Combine & deduplicate fresh current-year releases, prioritizing newest year first
         const rawReleases = [
             ...(hindiYearRes?.data?.results || []),
             ...(punjabiYearRes?.data?.results || []),
@@ -248,7 +272,6 @@ export const fetchHomeModules = async (req, res) => {
             return yearDiff !== 0 ? yearDiff : 0.5 - Math.random();
         });
 
-        // If Trending Today playlist yielded fewer than 12 albums, top up from fresh current-year albums
         const usedTrendingIds = new Set(liveTrendingAlbums.map(a => a.id));
         for (const alb of freshReleases) {
             if (liveTrendingAlbums.length >= 16) break;
@@ -268,7 +291,7 @@ export const fetchHomeModules = async (req, res) => {
 
         modulesCache = {
             data: responsePayload,
-            expiresAt: Date.now() + MODULES_CACHE_TTL
+            expiresAt: Date.now() + CACHE_TTL
         };
 
         return res.json(responsePayload);
