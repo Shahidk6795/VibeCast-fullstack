@@ -123,36 +123,39 @@ const ArtistPage = () => {
           const uniqueSongs = [];
           const seenNames = new Set();
 
-          // Normalize artist target (e.g. "The Weeknd" -> "weeknd" so JioSaavn's "Weeknd" credit matches)
           const coreArtistTarget = decodedArtistName
             .toLowerCase()
             .replace(/^the\s+/, '')
             .replace(/\$/g, 's')
             .trim();
+
+          const junkPatterns = [
+            "karaoke", "tribute", "cover", "lofi", "lo-fi",
+            "slowed", "reverb", "8d audio", "mashup", "ringtone", "type beat"
+          ];
           
           for (const song of songs) {
             const rawName = (song.name || "").replace(/&quot;/g, '"');
             const lowerName = rawName.toLowerCase();
-            const baseName = lowerName.split(' (')[0].trim();
-            
-            const isSpecialVersion = lowerName.includes('remix') || lowerName.includes('reprise') || lowerName.includes('unplugged') || lowerName.includes('acoustic') || lowerName.includes('lofi') || lowerName.includes('mashup');
-            const dedupeKey = isSpecialVersion ? lowerName : baseName;
+            const baseName = lowerName.split(' (')[0].split(' - ')[0].trim();
 
-            const primaryNames = song.artists?.primary?.map(a => a.name).join(', ') || "";
-            const allArtistNames = song.artists?.all?.map(a => a.name).join(', ') || "";
-            const singerStr = `${primaryNames} ${allArtistNames} ${song.primaryArtists || ""} ${song.singers || ""}`
+            const isJunk = junkPatterns.some(word => lowerName.includes(word));
+            if (isJunk) continue;
+
+            // Require the artist to be in PRIMARY credits (not just mentioned in brackets in the title)
+            const primaryList = song.artists?.primary?.map(a => a.name) || [];
+            const primaryStr = (primaryList.join(', ') || song.primaryArtists || "")
               .toLowerCase()
               .replace(/\$/g, 's');
-            
-            const isFake = lowerName.includes("karaoke") || lowerName.includes("tribute") || lowerName.includes("cover");
-            const isAuthentic = singerStr.trim() === "" || singerStr.includes(coreArtistTarget);
 
-            if (!seenNames.has(dedupeKey) && !isFake && isAuthentic) {
-              seenNames.add(dedupeKey);
+            if (!primaryStr || !primaryStr.includes(coreArtistTarget)) continue;
+
+            if (!seenNames.has(baseName)) {
+              seenNames.add(baseName);
               uniqueSongs.push({
                 id: song.id,
                 name: rawName, 
-                artist: primaryNames || song.primaryArtists || decodedArtistName,
+                artist: primaryList.join(', ') || song.primaryArtists || decodedArtistName,
                 path: getValidAudio(song.downloadUrl || song.url),
                 image: getValidImage(song.image),
                 duration: formatTime(song.duration)
