@@ -60,6 +60,15 @@ const getArtistName = (item) => {
   return "Various Artists";
 };
 
+const isMultiSongAlbum = (item) => {
+  if (!item || item.type === 'song') return false;
+  const rawCount = item.songCount ?? item.song_count ?? item.more_info?.song_count;
+  if (rawCount !== undefined && rawCount !== null && rawCount !== '') {
+    return Number(rawCount) > 1;
+  }
+  return item.type === 'album';
+};
+
 const Home = () => {
   const [allTracks, setAllTracks] = useState([]);
   const [dbTracks, setDbTracks] = useState([]);
@@ -147,10 +156,30 @@ const Home = () => {
         const trending = payload.trending?.albums || payload.trending || [];
         const charts = payload.charts || payload.top_charts || payload.playlists || [];
         const releases = payload.albums || payload.new_releases || payload.new_trending || [];
+
+        let filteredTrending = Array.isArray(trending) ? trending.filter(isMultiSongAlbum) : [];
+        const filteredReleases = Array.isArray(releases) ? releases.filter(isMultiSongAlbum) : [];
+
+        // If JioSaavn modules returned mostly 1-song singles, top up Trending Albums with multi-song albums
+        if (filteredTrending.length < 6) {
+          try {
+            const fallbackRes = await fetch(`${API_URL}/api/albums/trending`);
+            if (fallbackRes.ok) {
+              const extraAlbums = await fallbackRes.json();
+              if (Array.isArray(extraAlbums)) {
+                const existingIds = new Set(filteredTrending.map(a => a.id));
+                const uniqueExtras = extraAlbums.filter(a => a.id && !existingIds.has(a.id));
+                filteredTrending = [...filteredTrending, ...uniqueExtras];
+              }
+            }
+          } catch (fallbackErr) {
+            console.error("Fallback trending albums fetch failed:", fallbackErr);
+          }
+        }
         
-        setTrendingAlbums(Array.isArray(trending) ? trending : []);
+        setTrendingAlbums(filteredTrending);
         setTopCharts(Array.isArray(charts) ? charts : []);
-        setNewReleases(Array.isArray(releases) ? releases : []);
+        setNewReleases(filteredReleases);
       }
     } catch (error) {
       console.error("Error fetching home modules:", error);
