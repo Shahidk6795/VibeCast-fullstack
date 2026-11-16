@@ -142,13 +142,21 @@ const ArtistPage = () => {
             const isJunk = junkPatterns.some(word => lowerName.includes(word));
             if (isJunk) continue;
 
-            // Require the artist to be in PRIMARY credits (not just mentioned in brackets in the title)
             const primaryList = song.artists?.primary?.map(a => a.name) || [];
-            const primaryStr = (primaryList.join(', ') || song.primaryArtists || "")
-              .toLowerCase()
-              .replace(/\$/g, 's');
+            const allList = song.artists?.all?.map(a => a.name) || [];
+            const singerStr = (
+              primaryList.join(', ') ||
+              allList.join(', ') ||
+              song.primaryArtists ||
+              song.singers ||
+              ""
+            ).toLowerCase().replace(/\$/g, 's');
 
-            if (!primaryStr || !primaryStr.includes(coreArtistTarget)) continue;
+            // Allow empty metadata on foreign catalog items, but reject tracks credited to a different artist
+            if (singerStr && !singerStr.includes(coreArtistTarget)) continue;
+
+            const audioPath = getValidAudio(song.downloadUrl || song.url);
+            if (!audioPath) continue;
 
             if (!seenNames.has(baseName)) {
               seenNames.add(baseName);
@@ -156,7 +164,7 @@ const ArtistPage = () => {
                 id: song.id,
                 name: rawName, 
                 artist: primaryList.join(', ') || song.primaryArtists || decodedArtistName,
-                path: getValidAudio(song.downloadUrl || song.url),
+                path: audioPath,
                 image: getValidImage(song.image),
                 duration: formatTime(song.duration)
               });
