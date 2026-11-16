@@ -69,26 +69,19 @@ const getExactArtistId = (results, queryName) => {
 
 // --- LIVE API ROUTES ---
 
-// HYBRID ROUTE: Top Hits on Page 1, Deep Catalog on Page 2+ (With Search Fallback for International Artists)
+// UPGRADED: Official Artist Discography First on All Pages (With Search Fallback for International Artists)
 export const fetchArtistCatalog = async (req, res) => {
     const { name, page = 1 } = req.query;
     const SAAVN_API = process.env.SAAVN_API_URL; 
     
     try {
         const pageNum = parseInt(page) || 1;
-
-        if (pageNum === 1) {
-            const searchRes = await fetch(`${SAAVN_API}/search/songs?query=${encodeURIComponent(name)}&limit=40`);
-            const searchJson = await searchRes.json();
-            return res.json(searchJson);
-        }
-
         const artistRes = await fetch(`${SAAVN_API}/search/artists?query=${encodeURIComponent(name)}&limit=10`);
         const artistJson = await artistRes.json();
         const artistId = getExactArtistId(artistJson.data?.results, name);
 
         if (artistId) {
-            const targetPage = pageNum - 1;
+            const targetPage = pageNum - 1; // Page 1 -> 0, Page 2 -> 1
             const songsRes = await fetch(`${SAAVN_API}/artists/${artistId}/songs?page=${targetPage}`);
             const songsJson = await songsRes.json();
             const artistSongs = songsJson?.data?.songs || songsJson?.data?.results || [];
@@ -98,7 +91,7 @@ export const fetchArtistCatalog = async (req, res) => {
             }
         }
 
-        // Fallback for international artists (Drake, The Weeknd, etc.) whose artist ID has empty catalog pages
+        // Fallback for international artists (Drake, The Weeknd, etc.) whose artist ID has empty catalog arrays
         const fallbackRes = await fetch(
             `${SAAVN_API}/search/songs?query=${encodeURIComponent(name)}&page=${pageNum}&limit=40`
         );
