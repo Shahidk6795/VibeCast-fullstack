@@ -34,6 +34,28 @@ const vipArtistNames = [
   "Drake", "Shreya Ghoshal", "Badshah", "Travis Scott", "Pritam", "Dua Lipa"
 ];
 
+const CACHE_TTL = 10 * 60 * 1000; // 10 minutes
+
+const getCachedData = (key) => {
+  try {
+    const raw = sessionStorage.getItem(key);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    if (Date.now() - parsed.timestamp > CACHE_TTL) return null;
+    return parsed.data;
+  } catch {
+    return null;
+  }
+};
+
+const setCachedData = (key, data) => {
+  try {
+    sessionStorage.setItem(key, JSON.stringify({ timestamp: Date.now(), data }));
+  } catch (e) {
+    console.error("Cache write failed:", e);
+  }
+};
+
 const getValidImage = (imageObj) => {
   if (!imageObj) return 'https://ik.imagekit.io/vibecast/images/default-artist.jpg';
   if (typeof imageObj === 'string') return imageObj;
@@ -58,15 +80,6 @@ const getArtistName = (item) => {
   if (item.singers) return item.singers;
   if (item.artists && Array.isArray(item.artists)) return item.artists.map(a => a.name).join(', ');
   return "Various Artists";
-};
-
-const isMultiSongAlbum = (item) => {
-  if (!item || item.type === 'song') return false;
-  const rawCount = item.songCount ?? item.song_count ?? item.more_info?.song_count;
-  if (rawCount !== undefined && rawCount !== null && rawCount !== '') {
-    return Number(rawCount) > 1;
-  }
-  return item.type === 'album';
 };
 
 const Home = () => {
@@ -113,11 +126,20 @@ const Home = () => {
   const GreetingIcon = greeting.icon;
 
   const fetchTracks = useCallback(async () => {
+    const cached = getCachedData('vc_home_tracks');
+    if (cached) {
+      const shuffled = [...cached].sort(() => 0.5 - Math.random());
+      setAllTracks(shuffled);
+      setDbTracks(shuffled);
+      return;
+    }
+
     try {
       const response = await fetch(`${API_URL}/api/tracks`);
       if (response.ok) {
         const data = await response.json();
-        const shuffled = data.sort(() => 0.5 - Math.random());
+        setCachedData('vc_home_tracks', data);
+        const shuffled = [...data].sort(() => 0.5 - Math.random());
         setAllTracks(shuffled);
         setDbTracks(shuffled);
       }
@@ -127,6 +149,13 @@ const Home = () => {
   }, []);
 
   const fetchLiveVIPArtists = useCallback(async () => {
+    const cached = getCachedData('vc_home_artists');
+    if (cached) {
+      setAllArtists(cached);
+      setHomeArtists([...cached].sort(() => 0.5 - Math.random()));
+      return;
+    }
+
     try {
       const promises = vipArtistNames.map(name => 
         fetch(`${API_URL}/api/artists/search?query=${encodeURIComponent(name)}`).then(res => res.json())
@@ -139,47 +168,41 @@ const Home = () => {
           image: getValidImage(artistObj?.image)
         };
       });
+      setCachedData('vc_home_artists', liveArtists);
       setAllArtists(liveArtists);
-      setHomeArtists(liveArtists.sort(() => 0.5 - Math.random()));
+      setHomeArtists([...liveArtists].sort(() => 0.5 - Math.random()));
     } catch (error) {
       console.error("Error fetching live VIP artists:", error);
     }
   }, []);
 
   const fetchHomeModules = useCallback(async () => {
+    const cached = getCachedData('vc_home_modules');
+    if (cached) {
+      setTrendingAlbums(cached.trending || []);
+      setTopCharts(cached.charts || []);
+      setNewReleases(cached.releases || []);
+      return;
+    }
+
     try {
       const res = await fetch(`${API_URL}/api/artists/modules`);
       if (res.ok) {
         const data = await res.json();
         const payload = data.data || data; 
         
-        const trending = payload.trending?.albums || payload.trending || [];
-        const charts = payload.charts || payload.top_charts || payload.playlists || [];
-        const releases = payload.albums || payload.new_releases || payload.new_trending || [];
+        const rawTrending = payload.trending?.albums || payload.trending || [];
+        const rawCharts = payload.charts || payload.top_charts || payload.playlists || [];
+        const rawReleases = payload.albums || payload.new_releases || payload.new_trending || [];
 
-        let filteredTrending = Array.isArray(trending) ? trending.filter(isMultiSongAlbum) : [];
-        const filteredReleases = Array.isArray(releases) ? releases.filter(isMultiSongAlbum) : [];
+        const trending = Array.isArray(rawTrending) ? rawTrending : [];
+        const charts = Array.isArray(rawCharts) ? rawCharts : [];
+        const releases = Array.isArray(rawReleases) ? rawReleases : [];
 
-        // If JioSaavn modules returned mostly 1-song singles, top up Trending Albums with multi-song albums
-        if (filteredTrending.length < 6) {
-          try {
-            const fallbackRes = await fetch(`${API_URL}/api/albums/trending`);
-            if (fallbackRes.ok) {
-              const extraAlbums = await fallbackRes.json();
-              if (Array.isArray(extraAlbums)) {
-                const existingIds = new Set(filteredTrending.map(a => a.id));
-                const uniqueExtras = extraAlbums.filter(a => a.id && !existingIds.has(a.id));
-                filteredTrending = [...filteredTrending, ...uniqueExtras];
-              }
-            }
-          } catch (fallbackErr) {
-            console.error("Fallback trending albums fetch failed:", fallbackErr);
-          }
-        }
-        
-        setTrendingAlbums(filteredTrending);
-        setTopCharts(Array.isArray(charts) ? charts : []);
-        setNewReleases(filteredReleases);
+        setCachedData('vc_home_modules', { trending, charts, releases });
+        setTrendingAlbums(trending);
+        setTopCharts(charts);
+        setNewReleases(releases);
       }
     } catch (error) {
       console.error("Error fetching home modules:", error);
