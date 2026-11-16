@@ -69,49 +69,99 @@ const getExactArtistId = (results, queryName) => {
 
 // --- LIVE API ROUTES ---
 
-// HYBRID ROUTE: Top Hits on Page 1, Deep Catalog on Page 2+
+// HYBRID ROUTE: Top Hits on Page 1, Deep Catalog on Page 2+ (With Search Fallback for International Artists)
 export const fetchArtistCatalog = async (req, res) => {
     const { name, page = 1 } = req.query;
     const SAAVN_API = process.env.SAAVN_API_URL; 
     
     try {
-        if (parseInt(page) === 1) {
+        const pageNum = parseInt(page) || 1;
+
+        if (pageNum === 1) {
             const searchRes = await fetch(`${SAAVN_API}/search/songs?query=${encodeURIComponent(name)}&limit=40`);
             const searchJson = await searchRes.json();
             return res.json(searchJson);
-        } else {
-            const artistRes = await fetch(`${SAAVN_API}/search/artists?query=${encodeURIComponent(name)}`);
-            const artistJson = await artistRes.json();
-            
-            const artistId = getExactArtistId(artistJson.data?.results, name);
-            if (!artistId) return res.json({ data: { songs: [] } });
+        }
 
-            const targetPage = parseInt(page) - 1;
+        const artistRes = await fetch(`${SAAVN_API}/search/artists?query=${encodeURIComponent(name)}&limit=10`);
+        const artistJson = await artistRes.json();
+        const artistId = getExactArtistId(artistJson.data?.results, name);
+
+        if (artistId) {
+            const targetPage = pageNum - 1;
             const songsRes = await fetch(`${SAAVN_API}/artists/${artistId}/songs?page=${targetPage}`);
             const songsJson = await songsRes.json();
-            
-            res.json(songsJson);
+            const artistSongs = songsJson?.data?.songs || songsJson?.data?.results || [];
+
+            if (artistSongs.length > 0) {
+                return res.json(songsJson);
+            }
         }
+
+        // Fallback for international artists (Drake, The Weeknd, etc.) whose artist ID has empty catalog pages
+        const fallbackRes = await fetch(
+            `${SAAVN_API}/search/songs?query=${encodeURIComponent(name)}&page=${pageNum}&limit=40`
+        );
+        const fallbackJson = await fallbackRes.json();
+        return res.json({
+            data: {
+                songs: fallbackJson?.data?.results || []
+            }
+        });
     } catch (error) {
         console.error("Catalog Error:", error);
         res.status(500).json({ error: "Failed to fetch artist catalog" });
     }
 };
 
+// UPGRADED: Fetches Artist Albums with Automatic Search Fallback for Foreign Artists
 export const fetchArtistAlbums = async (req, res) => {
     const { name, page = 1 } = req.query;
     const SAAVN_API = process.env.SAAVN_API_URL; 
     
     try {
-        const artistRes = await fetch(`${SAAVN_API}/search/artists?query=${encodeURIComponent(name)}`);
+        const pageNum = parseInt(page) || 1;
+        const artistRes = await fetch(`${SAAVN_API}/search/artists?query=${encodeURIComponent(name)}&limit=10`);
         const artistJson = await artistRes.json();
-        
         const artistId = getExactArtistId(artistJson.data?.results, name);
-        if (!artistId) return res.json({ data: { albums: [] } });
 
-        const albumsRes = await fetch(`${SAAVN_API}/artists/${artistId}/albums?page=${page}`);
-        const albumsJson = await albumsRes.json();
-        res.json(albumsJson);
+        if (artistId) {
+            const albumsRes = await fetch(`${SAAVN_API}/artists/${artistId}/albums?page=${pageNum}`);
+            const albumsJson = await albumsRes.json();
+            const directAlbums = albumsJson?.data?.albums || albumsJson?.data?.results || [];
+
+            if (directAlbums.length > 0) {
+                return res.json(albumsJson);
+            }
+        }
+
+        // Fallback: Search albums directly by artist name & filter out tribute/karaoke clones
+        const fallbackRes = await fetch(
+            `${SAAVN_API}/search/albums?query=${encodeURIComponent(name)}&page=${pageNum}&limit=25`
+        );
+        const fallbackJson = await fallbackRes.json();
+        const rawAlbums = fallbackJson?.data?.results || [];
+        const targetLower = name.toLowerCase().trim();
+
+        const genuineAlbums = rawAlbums.filter((alb) => {
+            const titleLower = (alb.name || alb.title || "").toLowerCase();
+            if (titleLower.includes("tribute") || titleLower.includes("karaoke") || titleLower.includes("cover")) {
+                return false;
+            }
+            const artistsStr = (
+                alb.primaryArtists ||
+                alb.artists?.primary?.map((a) => a.name).join(", ") ||
+                alb.subtitle ||
+                ""
+            ).toLowerCase();
+            return artistsStr.includes(targetLower);
+        });
+
+        return res.json({
+            data: {
+                albums: genuineAlbums.length > 0 ? genuineAlbums : rawAlbums
+            }
+        });
     } catch (error) {
         console.error("Albums Error:", error);
         res.status(500).json({ error: "Failed to fetch artist albums" });
