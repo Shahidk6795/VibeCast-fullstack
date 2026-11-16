@@ -1,7 +1,7 @@
 import React, { useContext, useEffect, useState, useCallback, useRef } from "react";
 import { useNavigate, useParams, useLocation, useSearchParams } from "react-router-dom";
 import { PlayerContext } from "../context/PlayerContext";
-import { MoreVertical, Disc } from "lucide-react";
+import { MoreVertical } from "lucide-react";
 import AddToPlaylistModal from "@/components/AddToPlaylistModal";
 import { API_URL } from "../config.js";
 import { FastAverageColor } from "fast-average-color";
@@ -60,7 +60,15 @@ const ArtistPage = () => {
 
   const { playPlaylist, playPause, isPlaying, currentSongIndex, playlist, duration, setMiniPlayerVisible, isShuffle, toggleShuffle } = useContext(PlayerContext);
 
-  useEffect(() => { window.scrollTo(0, 0); }, []);
+  useEffect(() => {
+    window.scrollTo(0, 0);
+    setPage(1);
+    setAlbumPage(1);
+    setDisplaySongs([]);
+    setArtistAlbums([]);
+    setHasMore(true);
+    setHasMoreAlbums(true);
+  }, [decodedArtistName]);
 
   useEffect(() => {
     const fetchArtistDetails = async () => {
@@ -114,6 +122,13 @@ const ArtistPage = () => {
           
           const uniqueSongs = [];
           const seenNames = new Set();
+
+          // Normalize artist target (e.g. "The Weeknd" -> "weeknd" so JioSaavn's "Weeknd" credit matches)
+          const coreArtistTarget = decodedArtistName
+            .toLowerCase()
+            .replace(/^the\s+/, '')
+            .replace(/\$/g, 's')
+            .trim();
           
           for (const song of songs) {
             const rawName = (song.name || "").replace(/&quot;/g, '"');
@@ -123,17 +138,21 @@ const ArtistPage = () => {
             const isSpecialVersion = lowerName.includes('remix') || lowerName.includes('reprise') || lowerName.includes('unplugged') || lowerName.includes('acoustic') || lowerName.includes('lofi') || lowerName.includes('mashup');
             const dedupeKey = isSpecialVersion ? lowerName : baseName;
 
-            const singerStr = (song.artists?.primary?.map(a => a.name).join(', ') || song.primaryArtists || song.singers || "").toLowerCase();
+            const primaryNames = song.artists?.primary?.map(a => a.name).join(', ') || "";
+            const allArtistNames = song.artists?.all?.map(a => a.name).join(', ') || "";
+            const singerStr = `${primaryNames} ${allArtistNames} ${song.primaryArtists || ""} ${song.singers || ""}`
+              .toLowerCase()
+              .replace(/\$/g, 's');
             
             const isFake = lowerName.includes("karaoke") || lowerName.includes("tribute") || lowerName.includes("cover");
-            const isAuthentic = singerStr === "" || singerStr.includes(decodedArtistName.toLowerCase());
+            const isAuthentic = singerStr.trim() === "" || singerStr.includes(coreArtistTarget);
 
             if (!seenNames.has(dedupeKey) && !isFake && isAuthentic) {
               seenNames.add(dedupeKey);
               uniqueSongs.push({
                 id: song.id,
                 name: rawName, 
-                artist: song.artists?.primary?.map(a => a.name).join(', ') || decodedArtistName,
+                artist: primaryNames || song.primaryArtists || decodedArtistName,
                 path: getValidAudio(song.downloadUrl || song.url),
                 image: getValidImage(song.image),
                 duration: formatTime(song.duration)
@@ -202,7 +221,8 @@ const ArtistPage = () => {
   }, [activeTab, decodedArtistName, albumPage, artistAlbums.length]);
 
   const currentSong = playlist?.[currentSongIndex];
-  const isCurrentArtistPlaying = Boolean(currentSong?.artist?.toLowerCase().includes(decodedArtistName.toLowerCase()));
+  const coreMatch = decodedArtistName.toLowerCase().replace(/^the\s+/, '');
+  const isCurrentArtistPlaying = Boolean(currentSong?.artist?.toLowerCase().includes(coreMatch));
 
   const handlePlayPause = useCallback(() => {
     if (!displaySongs || displaySongs.length === 0) return;
@@ -306,7 +326,6 @@ const ArtistPage = () => {
                   return (
                     <div key={idx} onClick={() => selectSong(idx)} className={`group grid grid-cols-[16px_48px_1fr_90px] items-center gap-4 px-2 py-2 rounded-md cursor-default transition duration-200 clear-bg-on-hover ${isCurrentSong ? "clear-bg-active text-white" : "text-gray-400"}`}>
                       
-                      {/* FIX: Replaced SVG with your Custom ImageKit Animated GIF! */}
                       <div className="font-medium text-sm text-center flex justify-center items-center">
                         {isCurrentSong && isPlaying ? (
                           <img 
@@ -317,7 +336,6 @@ const ArtistPage = () => {
                         ) : (
                           <span className="group-hover:hidden">{idx + 1}</span>
                         )}
-                        {/* Show play icon on hover if NOT playing */}
                         {!(isCurrentSong && isPlaying) && (
                           <svg className="w-4 h-4 hidden group-hover:block text-white" fill="currentColor" viewBox="0 0 24 24"><path d="M8 5v14l11-7z" /></svg>
                         )}
@@ -359,7 +377,7 @@ const ArtistPage = () => {
                       </div>
                       <div className="flex flex-col">
                         <h4 className="font-bold text-white text-base truncate group-hover:text-[#1db954]">{album.title}</h4>
-                        <p className="text-xs text-gray-400 mt-0.5">{album.year} • Album</p>
+                        <p className="text-xs text-gray-400 mt-0.5">{album.year ? `${album.year} • Album` : "Album"}</p>
                       </div>
                     </div>
                   ))}
