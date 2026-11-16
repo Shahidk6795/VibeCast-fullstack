@@ -49,11 +49,9 @@ const getExactArtistId = (results, queryName) => {
     if (exact) return exact.id;
 
     // 2. Normalization Match (The KR$NA vs Krsna Solo Fix)
-    // Converts "$" to "s", removes special characters, and trims spaces
     const normalize = (str) => str.toLowerCase().replace(/\$/g, 's').replace(/[^a-z0-9\s]/g, '').trim();
-    const normTarget = normalize(queryName); // "kr$na" becomes "krsna"
+    const normTarget = normalize(queryName);
 
-    // Look for an exact normalized match ("krsna" matches "krsna", but NOT "krsnasolo")
     const exactNorm = results.find(a => normalize(a.title || a.name || "") === normTarget);
     if (exactNorm) return exactNorm.id;
 
@@ -63,7 +61,6 @@ const getExactArtistId = (results, queryName) => {
 
     return results[0].id;
 };
-
 
 // --- LIVE API ROUTES ---
 
@@ -81,9 +78,7 @@ export const fetchArtistCatalog = async (req, res) => {
             const artistRes = await fetch(`${SAAVN_API}/search/artists?query=${encodeURIComponent(name)}`);
             const artistJson = await artistRes.json();
             
-            // FIX: Use strict exact matcher
             const artistId = getExactArtistId(artistJson.data?.results, name);
-
             if (!artistId) return res.json({ data: { songs: [] } });
 
             const targetPage = parseInt(page) - 1;
@@ -106,9 +101,7 @@ export const fetchArtistAlbums = async (req, res) => {
         const artistRes = await fetch(`${SAAVN_API}/search/artists?query=${encodeURIComponent(name)}`);
         const artistJson = await artistRes.json();
         
-        // FIX: Use strict exact matcher here too!
         const artistId = getExactArtistId(artistJson.data?.results, name);
-
         if (!artistId) return res.json({ data: { albums: [] } });
 
         const albumsRes = await fetch(`${SAAVN_API}/artists/${artistId}/albums?page=${page}`);
@@ -180,43 +173,96 @@ export const fetchDefaultArtists = async (req, res) => {
         res.status(500).json({ error: "Failed to fetch default artists" });
     }
 };
-// NEW: Indestructible Home Modules Fetcher (With Fallback Generation)
+
+// UPGRADED: Live 2026 Dynamic Home Modules Fetcher (Trending, New Releases & Top Charts)
 export const fetchHomeModules = async (req, res) => {
     const SAAVN_API = process.env.SAAVN_API_URL; 
     try {
-        // 1. Try the standard modules route first
-        const response = await fetch(`${SAAVN_API}/modules?language=hindi,english`);
-        const data = await response.json();
-        
-        // 2. If the API wrapper says "route not found" (like saavn.dev), we generate our own!
-        if (data.success === false || data.message?.includes('not found')) {
-            console.log("Modules route missing on this API wrapper. Generating fallback modules...");
-            
-// Fire 3 simultaneous searches to construct the homepage feeds
-            const [trendingRes, releasesRes, chartsRes] = await Promise.all([
-                // FIX: Search for 'albums' here instead of 'songs'!
-                fetch(`${SAAVN_API}/search/albums?query=trending bollywood&limit=12`).then(r => r.json()),
-                fetch(`${SAAVN_API}/search/albums?query=new release&limit=12`).then(r => r.json()),
-                fetch(`${SAAVN_API}/search/playlists?query=top charts india&limit=12`).then(r => r.json())
-            ]);
+        const currentYear = new Date().getFullYear();
 
-            return res.json({
-                data: {
-                    // FIX: Map it to 'albums' so the frontend reads it correctly
-                    trending: { albums: trendingRes.data?.results || [] },
-                    albums: releasesRes.data?.results || [],
-                    charts: chartsRes.data?.results || []
+        // 1. Fetch live editorial playlists + fresh current-year album searches in parallel
+        const [trendingPlaylistSearch, hindiYearRes, punjabiYearRes, englishYearRes, chartsRes] = await Promise.all([
+            fetch(`${SAAVN_API}/search/playlists?query=${encodeURIComponent(`Trending Today ${currentYear}`)}&limit=3`).then(r => r.json()).catch(() => ({})),
+            fetch(`${SAAVN_API}/search/albums?query=${encodeURIComponent(`hindi ${currentYear}`)}&limit=20`).then(r => r.json()).catch(() => ({})),
+            fetch(`${SAAVN_API}/search/albums?query=${encodeURIComponent(`punjabi ${currentYear}`)}&limit=15`).then(r => r.json()).catch(() => ({})),
+            fetch(`${SAAVN_API}/search/albums?query=${encodeURIComponent(`english ${currentYear}`)}&limit=15`).then(r => r.json()).catch(() => ({})),
+            fetch(`${SAAVN_API}/search/playlists?query=top charts india&limit=12`).then(r => r.json()).catch(() => ({}))
+        ]);
+
+        // 2. Extract real live trending albums from JioSaavn's own "Trending Today" editorial playlist!
+        let liveTrendingAlbums = [];
+        const topTrendingPlaylistId = trendingPlaylistSearch?.data?.results?.[0]?.id;
+        if (topTrendingPlaylistId) {
+            try {
+                const plRes = await fetch(`${SAAVN_API}/playlists?id=${topTrendingPlaylistId}&limit=30`).then(r => r.json());
+                const plSongs = plRes?.data?.songs || [];
+                const seenAlbumIds = new Set();
+
+                for (const song of plSongs) {
+                    const alb = song.album;
+                    if (alb?.id && !seenAlbumIds.has(alb.id)) {
+                        seenAlbumIds.add(alb.id);
+                        liveTrendingAlbums.push({
+                            id: alb.id,
+                            name: alb.name || song.name,
+                            title: alb.name || song.name,
+                            image: song.image,
+                            year: song.year || String(currentYear),
+                            primaryArtists: song.artists?.primary?.map(a => a.name).join(', ') || "Various Artists",
+                            type: 'album'
+                        });
+                    }
                 }
-            });
+            } catch (e) {
+                console.error("Failed to extract albums from trending playlist:", e.message);
+            }
         }
 
-        // If the route DID exist, return it normally
-        res.json(data);
+        // 3. Combine & deduplicate fresh current-year releases, prioritizing newest year first
+        const rawReleases = [
+            ...(hindiYearRes?.data?.results || []),
+            ...(punjabiYearRes?.data?.results || []),
+            ...(englishYearRes?.data?.results || [])
+        ];
+
+        const seenReleaseIds = new Set();
+        const freshReleases = [];
+        for (const alb of rawReleases) {
+            if (alb?.id && !seenReleaseIds.has(alb.id)) {
+                seenReleaseIds.add(alb.id);
+                freshReleases.push(alb);
+            }
+        }
+
+        // Sort newest year first, with slight randomization within the same year so it stays lively
+        freshReleases.sort((a, b) => {
+            const yearDiff = Number(b.year || 0) - Number(a.year || 0);
+            return yearDiff !== 0 ? yearDiff : 0.5 - Math.random();
+        });
+
+        // If Trending Today playlist yielded fewer than 12 albums, top up from fresh current-year albums
+        const usedTrendingIds = new Set(liveTrendingAlbums.map(a => a.id));
+        for (const alb of freshReleases) {
+            if (liveTrendingAlbums.length >= 16) break;
+            if (!usedTrendingIds.has(alb.id)) {
+                usedTrendingIds.add(alb.id);
+                liveTrendingAlbums.push(alb);
+            }
+        }
+
+        return res.json({
+            data: {
+                trending: { albums: liveTrendingAlbums.slice(0, 12) },
+                albums: freshReleases.slice(0, 12),
+                charts: chartsRes?.data?.results || []
+            }
+        });
     } catch (error) {
         console.error("Home Modules Error:", error);
         res.status(500).json({ error: "Failed to fetch home modules" });
     }
 };
+
 // NEW: Fetch Playlist / Top Chart Details
 export const fetchPlaylistDetails = async (req, res) => {
     const { id } = req.query;
