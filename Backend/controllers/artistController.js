@@ -69,7 +69,7 @@ const getExactArtistId = (results, queryName) => {
 
 // --- LIVE API ROUTES ---
 
-// UPGRADED: Official Artist Discography First on All Pages (With Search Fallback for International Artists)
+// RELIABLE HYBRID CATALOG: Tries Official Artist ID first, falls back to Multi-Query Search for Foreign Artists
 export const fetchArtistCatalog = async (req, res) => {
     const { name, page = 1 } = req.query;
     const SAAVN_API = process.env.SAAVN_API_URL; 
@@ -81,26 +81,47 @@ export const fetchArtistCatalog = async (req, res) => {
         const artistId = getExactArtistId(artistJson.data?.results, name);
 
         if (artistId) {
-            const targetPage = pageNum - 1; // Page 1 -> 0, Page 2 -> 1
+            const targetPage = pageNum - 1;
             const songsRes = await fetch(`${SAAVN_API}/artists/${artistId}/songs?page=${targetPage}`);
             const songsJson = await songsRes.json();
-            const artistSongs = songsJson?.data?.songs || songsJson?.data?.results || [];
+            const artistSongs =
+                songsJson?.data?.songs ||
+                songsJson?.data?.topSongs ||
+                songsJson?.data?.results ||
+                [];
 
             if (artistSongs.length > 0) {
-                return res.json(songsJson);
+                return res.json({ data: { songs: artistSongs } });
             }
         }
 
-        // Fallback for international artists (Drake, The Weeknd, etc.) whose artist ID has empty catalog arrays
-        const fallbackRes = await fetch(
-            `${SAAVN_API}/search/songs?query=${encodeURIComponent(name)}&page=${pageNum}&limit=40`
-        );
-        const fallbackJson = await fallbackRes.json();
-        return res.json({
-            data: {
-                songs: fallbackJson?.data?.results || []
+        // Reliable Fallback for Foreign Artists (Drake, The Weeknd, Taylor Swift, etc.)
+        const [directSearch, hitsSearch] = await Promise.all([
+            fetch(`${SAAVN_API}/search/songs?query=${encodeURIComponent(name)}&page=${pageNum}&limit=30`)
+                .then(r => r.json())
+                .catch(() => ({})),
+            pageNum === 1
+                ? fetch(`${SAAVN_API}/search/songs?query=${encodeURIComponent(`${name} hits`)}&page=1&limit=20`)
+                    .then(r => r.json())
+                    .catch(() => ({}))
+                : Promise.resolve({})
+        ]);
+
+        const combined = [
+            ...(directSearch?.data?.results || []),
+            ...(hitsSearch?.data?.results || [])
+        ];
+
+        const seenIds = new Set();
+        const deduped = [];
+        for (const s of combined) {
+            if (s?.id && !seenIds.has(s.id)) {
+                seenIds.add(s.id);
+                deduped.push(s);
             }
-        });
+        }
+
+        return res.json({ data: { songs: deduped } });
     } catch (error) {
         console.error("Catalog Error:", error);
         res.status(500).json({ error: "Failed to fetch artist catalog" });
@@ -121,10 +142,14 @@ export const fetchArtistAlbums = async (req, res) => {
         if (artistId) {
             const albumsRes = await fetch(`${SAAVN_API}/artists/${artistId}/albums?page=${pageNum}`);
             const albumsJson = await albumsRes.json();
-            const directAlbums = albumsJson?.data?.albums || albumsJson?.data?.results || [];
+            const directAlbums =
+                albumsJson?.data?.albums ||
+                albumsJson?.data?.topAlbums ||
+                albumsJson?.data?.results ||
+                [];
 
             if (directAlbums.length > 0) {
-                return res.json(albumsJson);
+                return res.json({ data: { albums: directAlbums } });
             }
         }
 
@@ -134,7 +159,7 @@ export const fetchArtistAlbums = async (req, res) => {
         );
         const fallbackJson = await fallbackRes.json();
         const rawAlbums = fallbackJson?.data?.results || [];
-        const targetLower = name.toLowerCase().trim();
+        const coreTarget = name.toLowerCase().replace(/^the\s+/, '').trim();
 
         const genuineAlbums = rawAlbums.filter((alb) => {
             const titleLower = (alb.name || alb.title || "").toLowerCase();
@@ -147,7 +172,7 @@ export const fetchArtistAlbums = async (req, res) => {
                 alb.subtitle ||
                 ""
             ).toLowerCase();
-            return artistsStr.includes(targetLower);
+            return !artistsStr || artistsStr.includes(coreTarget);
         });
 
         return res.json({
