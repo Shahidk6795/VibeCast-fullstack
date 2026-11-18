@@ -24,31 +24,64 @@ const mapSaavnSong = (song) => {
 
 // Powers "Made For You" / Home feed dynamically via JioSaavn
 export const fetchAllTracks = async () => {
-  const apiUrl = process.env.SAAVN_API_URL;
-  if (!apiUrl) return [];
+  try {
+    const apiUrl = process.env.SAAVN_API_URL;
+    if (!apiUrl) throw new Error("No SAAVN_API_URL configured.");
 
-  const queries = ['trending hindi hits', 'arijit singh top songs', 'bollywood chill'];
-  const randomQuery = queries[Math.floor(Math.random() * queries.length)];
+    const queries = ['trending hindi hits', 'arijit singh top songs', 'bollywood chill'];
+    const randomQuery = queries[Math.floor(Math.random() * queries.length)];
 
-  const { data } = await axios.get(
-    `${apiUrl}/search/songs?query=${encodeURIComponent(randomQuery)}&limit=20`
-  );
+    // If this hits 429, Axios throws an error which we now safely catch
+    const { data } = await axios.get(
+      `${apiUrl}/search/songs?query=${encodeURIComponent(randomQuery)}&limit=20`,
+      { timeout: 8000 }
+    );
 
-  const results = data?.data?.results || [];
-  return results.map(mapSaavnSong).filter((t) => t.audio_url);
+    const results = data?.data?.results || [];
+    const saavnTracks = results.map(mapSaavnSong).filter((t) => t.audio_url);
+    
+    if (saavnTracks.length > 0) return saavnTracks;
+    throw new Error("JioSaavn returned empty tracks");
+
+  } catch (error) {
+    console.error("JioSaavn fetch failed (429/Timeout). Falling back to local DB...", error.message);
+    
+    try {
+      // BULLETPROOF FALLBACK: Load from MySQL so the frontend never crashes!
+      const [dbTracks] = await pool.query('SELECT * FROM tracks ORDER BY id DESC LIMIT 20');
+      return dbTracks;
+    } catch (dbErr) {
+      console.error("Database fallback failed:", dbErr.message);
+      return []; // Returns empty array instead of crashing with a 500 error
+    }
+  }
 };
 
 // Powers Artist Pages dynamically via JioSaavn
 export const fetchTracksByArtist = async (artistName) => {
-  const apiUrl = process.env.SAAVN_API_URL;
-  if (!apiUrl) return [];
+  try {
+    const apiUrl = process.env.SAAVN_API_URL;
+    if (!apiUrl) throw new Error("No SAAVN_API_URL configured.");
 
-  const { data } = await axios.get(
-    `${apiUrl}/search/songs?query=${encodeURIComponent(artistName)}&limit=20`
-  );
+    const { data } = await axios.get(
+      `${apiUrl}/search/songs?query=${encodeURIComponent(artistName)}&limit=20`,
+      { timeout: 8000 }
+    );
 
-  const results = data?.data?.results || [];
-  return results.map(mapSaavnSong).filter((t) => t.audio_url);
+    const results = data?.data?.results || [];
+    return results.map(mapSaavnSong).filter((t) => t.audio_url);
+
+  } catch (error) {
+    console.error(`JioSaavn failed for artist ${artistName}:`, error.message);
+    
+    try {
+      // BULLETPROOF FALLBACK: Check local MySQL for this artist
+      const [dbTracks] = await pool.query('SELECT * FROM tracks WHERE artist LIKE ? LIMIT 20', [`%${artistName}%`]);
+      return dbTracks;
+    } catch (dbErr) {
+      return [];
+    }
+  }
 };
 
 export const createTrack = async (data) => {
