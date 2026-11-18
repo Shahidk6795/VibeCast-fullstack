@@ -30,18 +30,28 @@ if (!fs.existsSync('uploads')) {
 
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
-// UPGRADED: Master Chain-Ping Route (wakes both VibeCast & JioSaavn API)
-app.get('/', (_req, res) => {
-  // 1. Reply immediately so cron-job.org never times out or disables your job
-  res.status(200).send("VibeCast API is awake and triggering JioSaavn!");
+// Cooldown tracker so JioSaavn is pinged at most once every 10 minutes
+let lastSaavnPing = 0;
+const SAAVN_PING_COOLDOWN = 10 * 60 * 1000;
 
-  // 2. Wake up the JioSaavn Render service in the background
+const wakeSaavnService = () => {
   const apiUrl = process.env.SAAVN_API_URL;
-  if (apiUrl) {
-    axios.get(`${apiUrl}/search/songs?query=arijit&limit=1`)
-      .then(() => console.log("Keep-Alive: JioSaavn API is awake!"))
-      .catch((err) => console.log("Keep-Alive ping sent to JioSaavn:", err.message));
-  }
+  if (!apiUrl) return;
+
+  const now = Date.now();
+  if (now - lastSaavnPing < SAAVN_PING_COOLDOWN) return;
+  lastSaavnPing = now;
+
+  // Hit the root URL of the JioSaavn Render service (wakes container without hammering JioSaavn upstream)
+  axios.get(apiUrl, { timeout: 8000 })
+    .then(() => console.log("Keep-Alive: JioSaavn Render service is awake!"))
+    .catch((err) => console.log("Keep-Alive ping sent to JioSaavn:", err.message));
+};
+
+// Master Chain-Ping Route (wakes both VibeCast & JioSaavn API)
+app.get('/', (_req, res) => {
+  res.status(200).send("VibeCast API is awake and triggering JioSaavn!");
+  wakeSaavnService();
 });
 
 app.get('/api/search', async (req, res) => {
@@ -52,14 +62,12 @@ app.get('/api/search', async (req, res) => {
     if (!apiUrl) {
         return res.status(500).json({ error: "SAAVN_API_URL is missing in environment variables" });
     }
+    if (!searchQuery) {
+        return res.json({ data: { results: [] } });
+    }
 
-    // 1. Construct the exact target URL
-    const targetUrl = `${apiUrl}/search/songs?query=${searchQuery}`;
-    
-    // 2. Log it to the Render terminal so we can see what is broken
-    console.log("DEBUG - Trying to fetch from:", targetUrl);
-
-    // 3. Make the request
+    // FIX: Safely encode the search query
+    const targetUrl = `${apiUrl}/search/songs?query=${encodeURIComponent(searchQuery)}`;
     const response = await axios.get(targetUrl);
     res.json(response.data);
 
@@ -72,7 +80,8 @@ app.get('/api/search', async (req, res) => {
 app.get('/api/health', async (_req, res) => {
   try {
     await pool.query('SELECT 1');
-    res.json({ message: 'Connected to MySQL!' });
+    wakeSaavnService();
+    res.status(200).json({ status: 'ok', db: 'Connected to MySQL!' });
   } catch (err) {
     res.status(500).json({ error: 'Database failed' });
   }
