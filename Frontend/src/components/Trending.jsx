@@ -51,7 +51,7 @@ const Trending = () => {
           const topChartId = charts[0]?.id;
 
           if (topChartId) {
-            const plRes = await fetch(`${API_URL}/api/artists/playlist?id=${topChartId}`);
+            const plRes = await fetch(`${API_URL}/api/artists/playlists?id=${topChartId}`);
             if (plRes.ok) {
               const plJson = await plRes.json();
               rawSongs = plJson?.data?.songs || [];
