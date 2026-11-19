@@ -11,7 +11,8 @@ export const decryptAudioUrl = (encryptedUrl) => {
     let decrypted = decipher.update(encryptedUrl, 'base64', 'utf8');
     decrypted += decipher.final('utf8');
     return decrypted.replace('_96.mp4', '_320.mp4');
-  } catch {
+  } catch (err) {
+    console.error('Decryption failed:', err.message);
     return '';
   }
 };
@@ -97,7 +98,17 @@ export const formatPlaylist = (pl) => ({
 
 const saavnGet = async (params) => {
   const { data } = await axios.get(SAAVN_BASE, {
-    params: { _format: 'json', _marker: 0, ctx: 'web6dot0', ...params },
+    params: {
+      _format: 'json',
+      _marker: 0,
+      api_version: 4,
+      ctx: 'web6dot0',
+      ...params
+    },
+    headers: {
+      'User-Agent':
+        'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+    },
     timeout: 8000
   });
   return data;
