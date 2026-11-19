@@ -12,41 +12,50 @@ const formatTime = (sec) => {
   return `${minutes}:${seconds}`;
 };
 
+const getAlbumImage = (img) => {
+  if (!img) return "https://placehold.co/200x200/181818/ec4899?text=Album";
+  if (typeof img === "string") return img;
+  if (Array.isArray(img)) {
+    const highRes = img.find((item) => item.quality === "500x500" || item.url?.includes("500x500"));
+    return highRes?.url || highRes?.link || img[img.length - 1]?.url || img[img.length - 1]?.link || "";
+  }
+  return img.url || img.link || "";
+};
+
 const SearchResults = () => {
   const location = useLocation();
   const navigate = useNavigate();
-  
+
   const getQuery = useCallback(() => new URLSearchParams(location.search).get("query") || "", [location.search]);
-  
+
   const [searchTerm, setSearchTerm] = useState(getQuery());
   const [filteredArtists, setFilteredArtists] = useState([]);
+  const [filteredAlbums, setFilteredAlbums] = useState([]);
   const [filteredTracks, setFilteredTracks] = useState([]);
   const [isSearching, setIsSearching] = useState(false);
 
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [selectedSong, setSelectedSong] = useState(null);
 
-  const { 
-    playPlaylist, 
-    isPlaying, 
-    playlist, 
-    currentSongIndex, 
+  const {
+    playPlaylist,
+    isPlaying,
+    playlist,
+    currentSongIndex,
     duration,
-    setMiniPlayerVisible 
+    setMiniPlayerVisible
   } = useContext(PlayerContext);
 
-  // Sync search term with URL if it changes
   useEffect(() => {
     setSearchTerm(getQuery());
   }, [location.search, getQuery]);
 
-  // Debounced & Filtered API Search
   useEffect(() => {
     const q = searchTerm.trim();
-    
-    // Prevent 500 errors by waiting for at least 3 characters
+
     if (q.length < 3) {
       setFilteredTracks([]);
+      setFilteredAlbums([]);
       setFilteredArtists([]);
       setIsSearching(false);
       return;
@@ -57,50 +66,69 @@ const SearchResults = () => {
     const delayDebounceFn = setTimeout(async () => {
       try {
         const res = await fetch(`${API_URL}/api/search?query=${encodeURIComponent(q)}`);
-        
+
         if (res.ok) {
           const apiResponse = await res.json();
           const songs = apiResponse.data?.results || [];
+          const albums = apiResponse.data?.albums || [];
 
           const uniqueSongs = [];
           const seenNames = new Set();
 
           for (const song of songs) {
-            // Clean name to accurately catch duplicates
-            const cleanName = song.name.split(' (')[0].trim().toLowerCase();
+            const cleanName = song.name.split(" (")[0].trim().toLowerCase();
 
             if (!seenNames.has(cleanName)) {
               seenNames.add(cleanName);
-              
-              // Map using .url to fix the audio/image crashing bug
+
+              const coverUrl = song.image ? song.image[song.image.length - 1]?.url : "";
+
               uniqueSongs.push({
                 id: song.id,
-                title: song.name.replace(/&quot;/g, '"'), 
-                artist: song.artists?.primary?.map(a => a.name).join(', ') || "Unknown Artist",
-                audio_url: song.downloadUrl ? song.downloadUrl[song.downloadUrl.length - 1]?.url : '',
-                cover_url: song.image ? song.image[song.image.length - 1]?.url : '',
-                duration: formatTime(song.duration) // Format the seconds into MM:SS
+                title: song.name.replace(/&quot;/g, '"'),
+                artist: song.artists?.primary?.map((a) => a.name).join(", ") || "Unknown Artist",
+                album: song.album || null,
+                audio_url: song.downloadUrl ? song.downloadUrl[song.downloadUrl.length - 1]?.url : "",
+                cover_url: coverUrl,
+                duration: formatTime(song.duration)
+              });
+            }
+          }
+
+          const uniqueAlbums = [];
+          const seenAlbumIds = new Set();
+          for (const alb of albums) {
+            if (alb?.id && !seenAlbumIds.has(alb.id)) {
+              seenAlbumIds.add(alb.id);
+              uniqueAlbums.push({
+                id: alb.id,
+                name: (alb.name || alb.title || "Unknown Album").replace(/&quot;/g, '"'),
+                year: alb.year || "",
+                primaryArtists: alb.primaryArtists || "Various Artists",
+                image: getAlbumImage(alb.image)
               });
             }
           }
 
           setFilteredTracks(uniqueSongs);
-          setFilteredArtists([]); 
+          setFilteredAlbums(uniqueAlbums);
+          setFilteredArtists([]);
         }
       } catch (err) {
         console.error("Failed to fetch from VibeCast API:", err);
       } finally {
         setIsSearching(false);
       }
-    }, 600); 
+    }, 600);
 
     return () => clearTimeout(delayDebounceFn);
   }, [searchTerm]);
 
   const formattedSongs = useMemo(() => {
-    return filteredTracks.map(track => ({
+    return filteredTracks.map((track) => ({
       name: track.title,
       artist: track.artist,
+      album: track.album,
       path: track.audio_url,
       image: track.cover_url,
       id: track.id,
@@ -126,7 +154,7 @@ const SearchResults = () => {
           type="text"
           value={searchTerm}
           onChange={(e) => setSearchTerm(e.target.value)}
-          placeholder="Search for songs (min 3 letters)..."
+          placeholder="Search for songs or albums (min 3 letters)..."
           className="w-full px-5 py-3 rounded-full bg-black/50 border border-pink-500/20 text-white placeholder-gray-400 text-center shadow-inner focus:outline-none focus:ring-2 focus:ring-pink-500 focus:border-transparent transition-all"
         />
         {isSearching && (
@@ -136,13 +164,13 @@ const SearchResults = () => {
         )}
       </div>
 
-      {filteredArtists.length === 0 && filteredTracks.length === 0 && !isSearching ? (
+      {filteredArtists.length === 0 && filteredAlbums.length === 0 && filteredTracks.length === 0 && !isSearching ? (
         <p className="text-gray-400 text-lg mt-20 animate-pulse">
           {searchTerm.length >= 3 ? "No results found 😔" : "Type at least 3 letters to search 🎧"}
         </p>
       ) : (
         <div className="w-full max-w-5xl flex flex-col gap-12">
-          
+
           {filteredArtists.length > 0 && (
             <section>
               <h2 className="text-2xl font-bold mb-6 text-white border-b border-pink-500/20 pb-2">Artists</h2>
@@ -157,9 +185,9 @@ const SearchResults = () => {
                       src={artist.image_url}
                       alt={artist.name}
                       loading="lazy"
-                      onError={(e) => { 
-                        e.currentTarget.onerror = null; 
-                        e.currentTarget.src = "https://placehold.co/150x150/181818/ec4899?text=Artist"; 
+                      onError={(e) => {
+                        e.currentTarget.onerror = null;
+                        e.currentTarget.src = "https://placehold.co/150x150/181818/ec4899?text=Artist";
                       }}
                       className="w-28 h-28 object-cover rounded-full mb-3 shadow-[0_0_20px_rgba(236,72,153,0.3)] group-hover:shadow-[0_0_40px_rgba(236,72,153,0.6)] transition-all duration-500 pointer-events-none"
                     />
@@ -173,10 +201,44 @@ const SearchResults = () => {
             </section>
           )}
 
+          {filteredAlbums.length > 0 && (
+            <section>
+              <h2 className="text-2xl font-bold mb-6 text-white border-b border-pink-500/20 pb-2">Albums</h2>
+              <div className="flex gap-5 overflow-x-auto pb-4 scrollbar-hide snap-x">
+                {filteredAlbums.map((alb) => (
+                  <div
+                    key={alb.id}
+                    onClick={() =>
+                      navigate(`/album/${alb.id}`, {
+                        state: { type: "album", image: alb.image, title: alb.name, year: alb.year }
+                      })
+                    }
+                    className="snap-start flex-shrink-0 w-36 sm:w-44 group bg-black/60 border border-pink-500/20 rounded-2xl p-3 flex flex-col backdrop-blur-xl hover:border-pink-500/40 hover:shadow-[0_0_20px_rgba(236,72,153,0.4)] hover:-translate-y-1 transition-all duration-300 cursor-pointer"
+                  >
+                    <img
+                      src={alb.image}
+                      alt={alb.name}
+                      loading="lazy"
+                      onError={(e) => {
+                        e.currentTarget.onerror = null;
+                        e.currentTarget.src = "https://placehold.co/200x200/181818/ec4899?text=Album";
+                      }}
+                      className="w-full aspect-square object-cover rounded-xl mb-3 shadow-md pointer-events-none"
+                    />
+                    <p className="font-semibold text-white text-sm truncate group-hover:text-pink-400 transition-colors">
+                      {alb.name}
+                    </p>
+                    <p className="text-xs text-gray-400 truncate mt-1">{alb.primaryArtists}</p>
+                  </div>
+                ))}
+              </div>
+            </section>
+          )}
+
           {filteredTracks.length > 0 && (
             <section>
               <h2 className="text-2xl font-bold mb-6 text-white border-b border-pink-500/20 pb-2">Songs</h2>
-              
+
               <div className="grid grid-cols-[16px_48px_1fr_60px_40px] gap-4 py-2 px-2 border-b border-pink-500/20 text-gray-400 text-xs uppercase font-semibold mb-2 pointer-events-none">
                 <div className="text-center">#</div>
                 <div></div>
@@ -190,10 +252,10 @@ const SearchResults = () => {
                   const isCurrentSong = playlist.length && playlist[currentSongIndex]?.name === song.name;
 
                   return (
-                    <div 
-                      key={song.id || index} 
+                    <div
+                      key={song.id || index}
                       onClick={() => selectSong(index)}
-                      className={`group grid grid-cols-[16px_48px_1fr_60px_40px] items-center gap-4 px-2 py-2 rounded-md cursor-pointer transition duration-200 hover:bg-white/10 ${isCurrentSong ? 'bg-pink-500/10 text-white' : 'text-gray-400'}`}
+                      className={`group grid grid-cols-[16px_48px_1fr_60px_40px] items-center gap-4 px-2 py-2 rounded-md cursor-pointer transition duration-200 hover:bg-white/10 ${isCurrentSong ? "bg-pink-500/10 text-white" : "text-gray-400"}`}
                     >
                       <div className="text-center font-medium text-sm">
                         {isCurrentSong && isPlaying ? (
@@ -208,24 +270,44 @@ const SearchResults = () => {
                         )}
                       </div>
 
-                      <img 
-                        src={song.image} 
-                        alt={song.name} 
+                      <img
+                        src={song.image}
+                        alt={song.name}
                         loading="lazy"
-                        onError={(e) => { 
-                          e.currentTarget.onerror = null; 
-                          e.currentTarget.src = "https://placehold.co/100x100/181818/ec4899?text=Song"; 
+                        onError={(e) => {
+                          e.currentTarget.onerror = null;
+                          e.currentTarget.src = "https://placehold.co/100x100/181818/ec4899?text=Song";
                         }}
-                        className="w-12 h-12 object-cover rounded shadow-md pointer-events-none" 
+                        className="w-12 h-12 object-cover rounded shadow-md pointer-events-none"
                       />
-                      
+
                       <div className="flex flex-col truncate">
-                        <span className={`text-base font-semibold truncate ${isCurrentSong ? 'text-pink-400' : 'text-white group-hover:text-pink-200'}`}>
+                        <span className={`text-base font-semibold truncate ${isCurrentSong ? "text-pink-400" : "text-white group-hover:text-pink-200"}`}>
                           {song.name}
                         </span>
-                        <span className="text-sm font-light text-gray-400 group-hover:text-gray-300 truncate">
-                          {song.artist}
-                        </span>
+                        <div className="flex items-center gap-2 text-sm font-light text-gray-400 group-hover:text-gray-300 truncate">
+                          <span className="truncate">{song.artist}</span>
+                          {song.album?.id && song.album?.name && (
+                            <>
+                              <span className="text-gray-600">•</span>
+                              <span
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  navigate(`/album/${song.album.id}`, {
+                                    state: {
+                                      type: "album",
+                                      image: song.image || "",
+                                      title: song.album.name
+                                    }
+                                  });
+                                }}
+                                className="text-xs text-gray-400 hover:text-pink-400 hover:underline cursor-pointer truncate"
+                              >
+                                {song.album.name}
+                              </span>
+                            </>
+                          )}
+                        </div>
                       </div>
 
                       <div className="text-right text-sm text-gray-400 font-mono">
@@ -233,7 +315,7 @@ const SearchResults = () => {
                       </div>
 
                       <div className="text-center flex justify-center">
-                        <button 
+                        <button
                           onClick={(e) => {
                             e.stopPropagation();
                             setSelectedSong(song);
@@ -255,7 +337,7 @@ const SearchResults = () => {
         </div>
       )}
 
-      <AddToPlaylistModal 
+      <AddToPlaylistModal
         isOpen={isModalOpen}
         onClose={() => setIsModalOpen(false)}
         track={selectedSong}
