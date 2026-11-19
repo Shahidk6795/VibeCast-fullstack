@@ -5,8 +5,7 @@ import fs from 'fs';
 import { fileURLToPath } from 'url';
 import dotenv from 'dotenv';
 import pool from './db.js';
-import axios from 'axios';
-import crypto from 'crypto';
+import * as saavn from './utils/saavnNative.js';
 
 import artistRoutes from './routes/artistRoutes.js';
 import trackRoutes from './routes/trackRoutes.js';
@@ -26,19 +25,9 @@ const __dirname = path.dirname(__filename);
 if (!fs.existsSync('uploads')) fs.mkdirSync('uploads');
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
-// Secret Key for Frontend Search Decryption
-const SAAVN_KEY = Buffer.from('38346591', 'utf8');
-const decryptAudioUrl = (encrypted) => {
-  try {
-    const decipher = crypto.createDecipheriv('des-ecb', SAAVN_KEY, null);
-    let dec = decipher.update(encrypted, 'base64', 'utf8');
-    dec += decipher.final('utf8');
-    return dec.replace('_96.mp4', '_320.mp4');
-  } catch (err) { return ''; }
-};
-
-// Root endpoint just for UptimeRobot (No extra pings needed!)
+// Root endpoint for UptimeRobot
 app.get('/', (_req, res) => res.status(200).send("VibeCast API is awake!"));
+
 app.get('/api/health', async (_req, res) => {
   try {
     await pool.query('SELECT 1');
@@ -48,29 +37,26 @@ app.get('/api/health', async (_req, res) => {
   }
 });
 
-// Native Search API (Mocking the wrapper format so React doesn't break)
+// Native Search API (Returns both songs and matching albums)
 app.get('/api/search', async (req, res) => {
   try {
-    const searchQuery = req.query.query; 
-    if (!searchQuery) return res.json({ data: { results: [] } });
+    const q = (req.query.query || '').trim();
+    if (!q) {
+      return res.json({ success: true, data: { results: [], albums: [] } });
+    }
 
-    const targetUrl = `https://www.jiosaavn.com/api.php?__call=search.getResults&q=${encodeURIComponent(searchQuery)}&n=20&p=1&_format=json&_marker=0&ctx=web6dot0`;
-    const { data } = await axios.get(targetUrl, { timeout: 8000 });
-    const results = data?.results || [];
+    const [songs, albums] = await Promise.all([
+      saavn.searchSongs(q, 20).catch(() => []),
+      saavn.searchAlbums(q, 12).catch(() => [])
+    ]);
 
-    const formattedResults = results.map(song => ({
-      id: song.id,
-      name: song.title || song.song || 'Unknown',
-      duration: parseInt(song.more_info?.duration || '0', 10),
-      artists: { primary: [{ name: song.more_info?.primary_artists || song.more_info?.singers || 'Unknown' }] },
-      image: [{ quality: "500x500", url: song.image?.replace('150x150', '500x500') || '' }],
-      downloadUrl: [{ quality: "320kbps", url: decryptAudioUrl(song.more_info?.encrypted_media_url || '') }]
-    }));
-
-    res.json({ success: true, data: { results: formattedResults } });
+    res.json({
+      success: true,
+      data: { results: songs, albums }
+    });
   } catch (error) {
-    console.error("Native Music Fetch Error:", error.message);
-    res.status(500).json({ error: "Failed to fetch songs from the music API" });
+    console.error("Search Error:", error.message);
+    res.status(500).json({ error: "Search failed" });
   }
 });
 
