@@ -30,7 +30,7 @@ const genreAmbience = {
 };
 
 const vipArtistNames = [
-  "Arijit Singh", "The Weeknd", "Taylor Swift", "Diljit Dosanjh", 
+  "Arijit Singh", "The Weeknd", "Taylor Swift", "Diljit Dosanjh",
   "Drake", "Shreya Ghoshal", "Badshah", "Travis Scott", "Pritam", "Dua Lipa"
 ];
 
@@ -59,7 +59,7 @@ const setCachedData = (key, data) => {
 const getValidImage = (imageObj) => {
   if (!imageObj) return 'https://ik.imagekit.io/vibecast/images/default-artist.jpg';
   if (typeof imageObj === 'string') return imageObj;
-  
+
   if (Array.isArray(imageObj)) {
     const highRes = imageObj.find(img => img.quality === '500x500' || img.url?.includes('500x500'));
     return highRes?.url || highRes?.link || imageObj[imageObj.length - 1]?.url || imageObj[imageObj.length - 1]?.link;
@@ -86,11 +86,11 @@ const Home = () => {
   const [allTracks, setAllTracks] = useState([]);
   const [dbTracks, setDbTracks] = useState([]);
   const [allArtists, setAllArtists] = useState([]);
-  const [homeArtists, setHomeArtists] = useState([]); 
-  
+  const [homeArtists, setHomeArtists] = useState([]);
+
   const [activeGenre, setActiveGenre] = useState("All");
   const [recentlyPlayed, setRecentlyPlayed] = useState([]);
-  
+
   const [trendingAlbums, setTrendingAlbums] = useState([]);
   const [topCharts, setTopCharts] = useState([]);
   const [newReleases, setNewReleases] = useState([]);
@@ -157,7 +157,7 @@ const Home = () => {
     }
 
     try {
-      const promises = vipArtistNames.map(name => 
+      const promises = vipArtistNames.map(name =>
         fetch(`${API_URL}/api/artists/search?query=${encodeURIComponent(name)}`).then(res => res.json())
       );
       const results = await Promise.all(promises);
@@ -177,7 +177,7 @@ const Home = () => {
   }, []);
 
   const fetchHomeModules = useCallback(async () => {
-    const cached = getCachedData('vc_home_modules');
+    const cached = getCachedData('vc_home_modules_v2');
     if (cached) {
       setTrendingAlbums(cached.trending || []);
       setTopCharts(cached.charts || []);
@@ -189,8 +189,8 @@ const Home = () => {
       const res = await fetch(`${API_URL}/api/artists/modules`);
       if (res.ok) {
         const data = await res.json();
-        const payload = data.data || data; 
-        
+        const payload = data.data || data;
+
         const rawTrending = payload.trending?.albums || payload.trending || [];
         const rawCharts = payload.charts || payload.top_charts || payload.playlists || [];
         const rawReleases = payload.albums || payload.new_releases || payload.new_trending || [];
@@ -199,7 +199,7 @@ const Home = () => {
         const charts = Array.isArray(rawCharts) ? rawCharts : [];
         const releases = Array.isArray(rawReleases) ? rawReleases : [];
 
-        setCachedData('vc_home_modules', { trending, charts, releases });
+        setCachedData('vc_home_modules_v2', { trending, charts, releases });
         setTrendingAlbums(trending);
         setTopCharts(charts);
         setNewReleases(releases);
@@ -216,7 +216,7 @@ const Home = () => {
   }, [fetchTracks, fetchLiveVIPArtists, fetchHomeModules]);
 
   const handleArtistClick = useCallback((artist) => {
-    navigate(`/artist/${encodeURIComponent(artist.name)}`, { state: { image: artist.image } }); 
+    navigate(`/artist/${encodeURIComponent(artist.name)}`, { state: { image: artist.image } });
   }, [navigate]);
 
   const handleGenreClick = (genre) => {
@@ -258,19 +258,19 @@ const Home = () => {
       }
     }
     return activeMixes;
-  }, [allTracks, dbTracks, activeGenre]); 
+  }, [allTracks, dbTracks, activeGenre]);
 
   const heroArtist = homeArtists.length > 0 ? homeArtists[0] : null;
 
   return (
     <div className="relative w-full min-h-screen text-white overflow-x-hidden bg-black transition-colors duration-700">
-      
+
       <div className={`fixed inset-0 z-0 bg-gradient-to-b ${genreAmbience[activeGenre] || genreAmbience["All"]} transition-all duration-1000 ease-in-out`}>
         <Hyperspeed intensity={0.4} colorShift={true} trailLength={50} speed={0.7} />
       </div>
 
       <div className="relative z-10 p-6 md:p-8 pt-4 min-h-screen pb-32 max-w-7xl mx-auto">
-        
+
         <header className="mb-10 pt-4">
           <div className="flex items-center gap-3 mb-6">
             <GreetingIcon className={`w-8 h-8 md:w-10 md:h-10 ${greeting.color} drop-shadow-md`} />
@@ -278,15 +278,15 @@ const Home = () => {
               {greeting.text}{user?.firstName ? `, ${user.firstName}` : ""}
             </h1>
           </div>
-          
+
           <div className="flex gap-3 overflow-x-auto pb-3 scrollbar-hide snap-x">
             {genres.map(genre => (
               <button
                 key={genre}
                 onClick={() => handleGenreClick(genre)}
                 className={`snap-start whitespace-nowrap px-6 py-2.5 rounded-full text-[13px] font-bold uppercase tracking-wider transition-all duration-300 ${
-                  activeGenre === genre 
-                  ? "bg-white text-black shadow-[0_0_20px_rgba(255,255,255,0.5)] scale-105" 
+                  activeGenre === genre
+                  ? "bg-white text-black shadow-[0_0_20px_rgba(255,255,255,0.5)] scale-105"
                   : "bg-white/5 text-gray-300 hover:text-white hover:bg-white/15 border border-white/10"
                 }`}
               >
@@ -327,7 +327,7 @@ const Home = () => {
             </div>
             <div className="absolute inset-0 bg-gradient-to-t from-black via-black/40 to-transparent"></div>
             <div className="absolute inset-0 bg-gradient-to-r from-black/80 via-black/30 to-transparent"></div>
-            
+
             <div className="absolute bottom-0 left-0 p-6 md:p-10 z-10 flex flex-col items-start w-full">
               <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-[#1db954]/20 border border-[#1db954]/50 text-[#1db954] text-xs font-bold uppercase tracking-widest mb-3 backdrop-blur-md">
                 <Sparkles className="w-3 h-3" /> Artist of the Week
@@ -347,7 +347,7 @@ const Home = () => {
             </h2>
             <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4 sm:gap-6">
               {generatedMixes.map((mix) => (
-                <div 
+                <div
                   key={mix.title}
                   onClick={() => {
                     playPlaylist?.(mix.tracks, 0);
@@ -358,7 +358,7 @@ const Home = () => {
                   <img src={mix.cover} className="w-full h-full object-cover opacity-70 group-hover:scale-110 transition-transform duration-700" alt={mix.title} />
                   <div className={`absolute inset-0 opacity-40 mix-blend-multiply ${mix.color}`}></div>
                   <div className="absolute inset-0 bg-gradient-to-t from-black/95 via-black/30 to-transparent z-10"></div>
-                  
+
                   <div className="absolute bottom-0 left-0 p-4 sm:p-5 z-20 w-full">
                     <h3 className="text-lg sm:text-xl font-black text-white leading-tight drop-shadow-md mb-1">{mix.title}</h3>
                     <p className="text-xs text-gray-300 font-medium line-clamp-2">{mix.subtitle}</p>
@@ -378,17 +378,17 @@ const Home = () => {
             <h2 className="text-2xl font-bold mb-5 text-white flex items-center gap-2">
               <Flame className="w-6 h-6 text-orange-500" /> Trending Albums
             </h2>
-            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-6">
-              {trendingAlbums.slice(0, 12).map((album, idx) => {
+            <div className="flex gap-5 overflow-x-auto pb-4 scrollbar-hide snap-x">
+              {trendingAlbums.map((album, idx) => {
                 const albumTitle = (album.name || album.title || "Unknown Album").replace(/&quot;/g, '"');
                 return (
                   <div
                     key={album.id || idx}
                     onClick={() => navigate(`/album/${album.id}`, { state: { type: 'album', image: getValidImage(album.image), title: albumTitle } })}
-                    className="group flex flex-col gap-2 cursor-pointer transition-all duration-300"
+                    className="snap-start flex-shrink-0 w-36 sm:w-44 group flex flex-col gap-2 cursor-pointer transition-all duration-300"
                   >
                     <div className="relative w-full aspect-square rounded-lg overflow-hidden shadow-lg bg-[#181818]">
-                      <img src={getValidImage(album.image)} alt={albumTitle} className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105" />
+                      <img src={getValidImage(album.image)} alt={albumTitle} loading="lazy" className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105" />
                     </div>
                     <div className="flex flex-col px-1">
                       <p className="font-bold text-[15px] leading-tight text-white truncate group-hover:text-[#1db954] transition-colors">{albumTitle}</p>
@@ -406,17 +406,17 @@ const Home = () => {
             <h2 className="text-2xl font-bold mb-5 text-white flex items-center gap-2">
               <Radio className="w-6 h-6 text-purple-500" /> New Releases
             </h2>
-            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-6">
-              {newReleases.slice(0, 12).map((album) => {
+            <div className="flex gap-5 overflow-x-auto pb-4 scrollbar-hide snap-x">
+              {newReleases.map((album) => {
                 const albumTitle = (album.name || album.title || "Unknown Album").replace(/&quot;/g, '"');
                 return (
-                  <div 
+                  <div
                     key={album.id}
                     onClick={() => navigate(`/album/${album.id}`, { state: { type: 'album', image: getValidImage(album.image), title: albumTitle, year: album.year } })}
-                    className="group flex flex-col gap-2 cursor-pointer transition-all duration-300"
+                    className="snap-start flex-shrink-0 w-36 sm:w-44 group flex flex-col gap-2 cursor-pointer transition-all duration-300"
                   >
                     <div className="relative w-full aspect-square rounded-lg overflow-hidden shadow-lg bg-[#181818]">
-                      <img src={getValidImage(album.image)} alt={albumTitle} className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105" />
+                      <img src={getValidImage(album.image)} alt={albumTitle} loading="lazy" className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105" />
                     </div>
                     <div className="flex flex-col px-1">
                       <p className="font-bold text-[15px] leading-tight text-white truncate group-hover:text-[#1db954] transition-colors">{albumTitle}</p>
@@ -434,17 +434,17 @@ const Home = () => {
             <h2 className="text-2xl font-bold mb-5 text-white flex items-center gap-2">
               <BarChart2 className="w-6 h-6 text-blue-500" /> Top Charts
             </h2>
-            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-6">
-              {topCharts.slice(0, 12).map((chart) => {
+            <div className="flex gap-5 overflow-x-auto pb-4 scrollbar-hide snap-x">
+              {topCharts.map((chart) => {
                 const chartTitle = (chart.title || chart.name || "Chart").replace(/&quot;/g, '"');
                 return (
-                  <div 
+                  <div
                     key={chart.id}
                     onClick={() => navigate(`/album/${chart.id}`, { state: { type: chart.type || 'playlist', image: getValidImage(chart.image), title: chartTitle } })}
-                    className="group flex flex-col gap-2 cursor-pointer transition-all duration-300"
+                    className="snap-start flex-shrink-0 w-36 sm:w-44 group flex flex-col gap-2 cursor-pointer transition-all duration-300"
                   >
                     <div className="relative w-full aspect-square rounded-lg overflow-hidden shadow-lg bg-[#181818]">
-                      <img src={getValidImage(chart.image)} alt={chartTitle} className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105" />
+                      <img src={getValidImage(chart.image)} alt={chartTitle} loading="lazy" className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105" />
                     </div>
                     <div className="flex flex-col px-1">
                       <p className="font-bold text-[15px] leading-tight text-white truncate group-hover:text-[#1db954] transition-colors">{chartTitle}</p>
