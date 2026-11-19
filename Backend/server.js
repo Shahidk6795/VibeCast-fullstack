@@ -6,6 +6,7 @@ import { fileURLToPath } from 'url';
 import dotenv from 'dotenv';
 import pool from './db.js';
 import axios from 'axios';
+import crypto from 'crypto';
 
 import artistRoutes from './routes/artistRoutes.js';
 import trackRoutes from './routes/trackRoutes.js';
@@ -16,74 +17,60 @@ import settingsRoutes from './routes/settingsRoutes.js';
 import albumRoutes from './routes/albumRoutes.js';
 
 dotenv.config();
-
 const app = express();
 app.use(cors());
 app.use(express.json());
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
-
-if (!fs.existsSync('uploads')) {
-    fs.mkdirSync('uploads');
-}
-
+if (!fs.existsSync('uploads')) fs.mkdirSync('uploads');
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
-// Cooldown tracker so JioSaavn is pinged at most once every 10 minutes
-let lastSaavnPing = 0;
-const SAAVN_PING_COOLDOWN = 10 * 60 * 1000;
-
-const wakeSaavnService = () => {
-  const apiUrl = process.env.SAAVN_API_URL;
-  if (!apiUrl) return;
-
-  const now = Date.now();
-  if (now - lastSaavnPing < SAAVN_PING_COOLDOWN) return;
-  lastSaavnPing = now;
-
-  // Hit the root URL of the JioSaavn Render service (wakes container without hammering JioSaavn upstream)
-  axios.get(apiUrl, { timeout: 8000 })
-    .then(() => console.log("Keep-Alive: JioSaavn Render service is awake!"))
-    .catch((err) => console.log("Keep-Alive ping sent to JioSaavn:", err.message));
+// Secret Key for Frontend Search Decryption
+const SAAVN_KEY = Buffer.from('38346591', 'utf8');
+const decryptAudioUrl = (encrypted) => {
+  try {
+    const decipher = crypto.createDecipheriv('des-ecb', SAAVN_KEY, null);
+    let dec = decipher.update(encrypted, 'base64', 'utf8');
+    dec += decipher.final('utf8');
+    return dec.replace('_96.mp4', '_320.mp4');
+  } catch (err) { return ''; }
 };
 
-// Master Chain-Ping Route (wakes both VibeCast & JioSaavn API)
-app.get('/', (_req, res) => {
-  res.status(200).send("VibeCast API is awake and triggering JioSaavn!");
-  wakeSaavnService();
-});
-
-app.get('/api/search', async (req, res) => {
-  try {
-    const searchQuery = req.query.query; 
-    const apiUrl = process.env.SAAVN_API_URL; 
-
-    if (!apiUrl) {
-        return res.status(500).json({ error: "SAAVN_API_URL is missing in environment variables" });
-    }
-    if (!searchQuery) {
-        return res.json({ data: { results: [] } });
-    }
-
-    // FIX: Safely encode the search query
-    const targetUrl = `${apiUrl}/search/songs?query=${encodeURIComponent(searchQuery)}`;
-    const response = await axios.get(targetUrl);
-    res.json(response.data);
-
-  } catch (error) {
-    console.error("Music Fetch Error:", error.message);
-    res.status(500).json({ error: "Failed to fetch songs from the music API" });
-  }
-});
-
+// Root endpoint just for UptimeRobot (No extra pings needed!)
+app.get('/', (_req, res) => res.status(200).send("VibeCast API is awake!"));
 app.get('/api/health', async (_req, res) => {
   try {
     await pool.query('SELECT 1');
-    wakeSaavnService();
     res.status(200).json({ status: 'ok', db: 'Connected to MySQL!' });
   } catch (err) {
     res.status(500).json({ error: 'Database failed' });
+  }
+});
+
+// Native Search API (Mocking the wrapper format so React doesn't break)
+app.get('/api/search', async (req, res) => {
+  try {
+    const searchQuery = req.query.query; 
+    if (!searchQuery) return res.json({ data: { results: [] } });
+
+    const targetUrl = `https://www.jiosaavn.com/api.php?__call=search.getResults&q=${encodeURIComponent(searchQuery)}&n=20&p=1&_format=json&_marker=0&ctx=web6dot0`;
+    const { data } = await axios.get(targetUrl, { timeout: 8000 });
+    const results = data?.results || [];
+
+    const formattedResults = results.map(song => ({
+      id: song.id,
+      name: song.title || song.song || 'Unknown',
+      duration: parseInt(song.more_info?.duration || '0', 10),
+      artists: { primary: [{ name: song.more_info?.primary_artists || song.more_info?.singers || 'Unknown' }] },
+      image: [{ quality: "500x500", url: song.image?.replace('150x150', '500x500') || '' }],
+      downloadUrl: [{ quality: "320kbps", url: decryptAudioUrl(song.more_info?.encrypted_media_url || '') }]
+    }));
+
+    res.json({ success: true, data: { results: formattedResults } });
+  } catch (error) {
+    console.error("Native Music Fetch Error:", error.message);
+    res.status(500).json({ error: "Failed to fetch songs from the music API" });
   }
 });
 
