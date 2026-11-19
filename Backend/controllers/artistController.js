@@ -190,23 +190,26 @@ export const fetchHomeModules = async (req, res) => {
     }
 
     const currentYear = new Date().getFullYear();
+    const lastYear = currentYear - 1;
+
     const [trendingPlaylists, hindiAlbums, punjabiAlbums, englishAlbums, charts] = await Promise.all([
-      saavn.searchPlaylists(`Trending Today ${currentYear}`, 3).catch(() => []),
-      saavn.searchAlbums(`hindi ${currentYear}`, 20).catch(() => []),
-      saavn.searchAlbums(`punjabi ${currentYear}`, 15).catch(() => []),
-      saavn.searchAlbums(`english ${currentYear}`, 15).catch(() => []),
-      saavn.searchPlaylists('top charts india', 12).catch(() => [])
+      saavn.searchPlaylists(`Trending Today ${currentYear}`, 5).catch(() => []),
+      saavn.searchAlbums(`hindi ${currentYear}`, 35).catch(() => []),
+      saavn.searchAlbums(`punjabi ${currentYear}`, 25).catch(() => []),
+      saavn.searchAlbums(`english ${currentYear}`, 25).catch(() => []),
+      saavn.searchPlaylists('top charts india', 25).catch(() => [])
     ]);
 
     let liveTrendingAlbums = [];
-    const topPlaylistId = trendingPlaylists?.[0]?.id;
-    if (topPlaylistId) {
+    const seenTrendingIds = new Set();
+
+    for (const pl of (trendingPlaylists || []).slice(0, 2)) {
+      if (!pl?.id) continue;
       try {
-        const plData = await saavn.getPlaylistDetails(topPlaylistId);
-        const seenAlbumIds = new Set();
+        const plData = await saavn.getPlaylistDetails(pl.id);
         for (const song of plData.songs || []) {
-          if (song.album?.id && !seenAlbumIds.has(song.album.id)) {
-            seenAlbumIds.add(song.album.id);
+          if (song.album?.id && !seenTrendingIds.has(song.album.id)) {
+            seenTrendingIds.add(song.album.id);
             liveTrendingAlbums.push({
               id: song.album.id,
               name: song.album.name || song.name,
@@ -226,29 +229,31 @@ export const fetchHomeModules = async (req, res) => {
     const seenReleaseIds = new Set();
     const freshReleases = [...hindiAlbums, ...punjabiAlbums, ...englishAlbums].filter((alb) => {
       if (!alb?.id || seenReleaseIds.has(alb.id)) return false;
+      const albYear = Number(alb.year || 0);
+      if (albYear && albYear < lastYear) return false;
       seenReleaseIds.add(alb.id);
       return true;
     });
 
     freshReleases.sort((a, b) => {
-      const yearDiff = Number(b.year || 0) - Number(a.year || 0);
-      return yearDiff !== 0 ? yearDiff : 0.5 - Math.random();
+      const multiDiff = (Number(b.songCount) > 1 ? 1 : 0) - (Number(a.songCount) > 1 ? 1 : 0);
+      if (multiDiff !== 0) return multiDiff;
+      return Number(b.year || 0) - Number(a.year || 0);
     });
 
-    const usedTrendingIds = new Set(liveTrendingAlbums.map((a) => a.id));
     for (const alb of freshReleases) {
-      if (liveTrendingAlbums.length >= 16) break;
-      if (!usedTrendingIds.has(alb.id)) {
-        usedTrendingIds.add(alb.id);
+      if (liveTrendingAlbums.length >= 30) break;
+      if (!seenTrendingIds.has(alb.id)) {
+        seenTrendingIds.add(alb.id);
         liveTrendingAlbums.push(alb);
       }
     }
 
     const responsePayload = {
       data: {
-        trending: { albums: liveTrendingAlbums.slice(0, 12) },
-        albums: freshReleases.slice(0, 12),
-        charts
+        trending: { albums: liveTrendingAlbums.slice(0, 30) },
+        albums: freshReleases.slice(0, 30),
+        charts: charts.slice(0, 25)
       }
     };
 
