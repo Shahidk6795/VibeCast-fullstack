@@ -77,12 +77,25 @@ const getValidAudio = (audioObj) => {
   return audioObj.url || audioObj.link || '';
 };
 
+const getCleanArtistName = (raw) => {
+  if (!raw || typeof raw !== 'string') return "";
+  const primary = raw.split(",")[0].trim();
+  if (!primary || primary.length > 40) return "";
+  return primary;
+};
+
 const getArtistName = (item) => {
-  if (item.subtitle && item.subtitle !== "Album" && item.subtitle !== "Top Chart") return item.subtitle;
-  if (item.primaryArtists) return item.primaryArtists;
-  if (item.singers) return item.singers;
-  if (item.artists && Array.isArray(item.artists)) return item.artists.map(a => a.name).join(', ');
-  return "Various Artists";
+  let candidate = "";
+  if (item.subtitle && item.subtitle !== "Album" && item.subtitle !== "Top Chart") {
+    candidate = item.subtitle;
+  } else if (item.primaryArtists) {
+    candidate = item.primaryArtists;
+  } else if (item.singers) {
+    candidate = item.singers;
+  } else if (Array.isArray(item.artists) && item.artists.length > 0) {
+    candidate = item.artists[0]?.name || "";
+  }
+  return getCleanArtistName(candidate) || "Various Artists";
 };
 
 const Home = () => {
@@ -152,7 +165,7 @@ const Home = () => {
   }, []);
 
   const fetchLiveVIPArtists = useCallback(async () => {
-    const cached = getCachedData('vc_home_artists_v2');
+    const cached = getCachedData('vc_home_artists_v3');
     if (cached) {
       setAllArtists(cached);
       setHomeArtists(shuffleList(cached));
@@ -167,21 +180,21 @@ const Home = () => {
       );
       const results = await Promise.all(promises);
 
-      // Filter out any artist that didn't return a valid result or image
       const liveArtists = results
         .map((res, idx) => {
           const artistObj = res?.data?.results?.[0];
           const image = getValidImage(artistObj?.image);
-          if (!artistObj || !image) return null;
+          const cleanName = getCleanArtistName(artistObj?.title || artistObj?.name || vipArtistNames[idx]);
+          if (!artistObj || !image || !cleanName) return null;
           return {
-            name: artistObj.title || artistObj.name || vipArtistNames[idx],
+            name: cleanName,
             image
           };
         })
         .filter(Boolean);
 
       if (liveArtists.length > 0) {
-        setCachedData('vc_home_artists_v2', liveArtists);
+        setCachedData('vc_home_artists_v3', liveArtists);
         setAllArtists(liveArtists);
         setHomeArtists(shuffleList(liveArtists));
       }
@@ -191,7 +204,7 @@ const Home = () => {
   }, []);
 
   const fetchHomeModules = useCallback(async () => {
-    const cached = getCachedData('vc_home_modules_v2');
+    const cached = getCachedData('vc_home_modules_v3');
     if (cached) {
       setTrendingAlbums(shuffleList(cached.trending));
       setTopCharts(shuffleList(cached.charts));
@@ -213,7 +226,7 @@ const Home = () => {
         const charts = Array.isArray(rawCharts) ? rawCharts : [];
         const releases = Array.isArray(rawReleases) ? rawReleases : [];
 
-        setCachedData('vc_home_modules_v2', { trending, charts, releases });
+        setCachedData('vc_home_modules_v3', { trending, charts, releases });
         setTrendingAlbums(shuffleList(trending));
         setTopCharts(shuffleList(charts));
         setNewReleases(shuffleList(releases));
@@ -230,7 +243,9 @@ const Home = () => {
   }, [fetchTracks, fetchLiveVIPArtists, fetchHomeModules]);
 
   const handleArtistClick = useCallback((artist) => {
-    navigate(`/artist/${encodeURIComponent(artist.name)}`, { state: { image: artist.image } });
+    const cleanName = getCleanArtistName(artist?.name);
+    if (!cleanName) return;
+    navigate(`/artist/${encodeURIComponent(cleanName)}`, { state: { image: artist.image } });
   }, [navigate]);
 
   const handleGenreClick = (genre) => {
@@ -263,7 +278,10 @@ const Home = () => {
       if (sourceTracks.length >= 5) {
         const shuffled = shuffleList(sourceTracks);
         const playlistTracks = shuffled.slice(0, 12).map(t => ({
-          name: t.title, artist: t.artist, path: getValidAudio(t.audio_url), image: getValidImage(t.cover_url) || 'https://ik.imagekit.io/vibecast/images/default-artist.jpg'
+          name: t.title,
+          artist: getCleanArtistName(t.artist) || t.artist || "Various Artists",
+          path: getValidAudio(t.audio_url),
+          image: getValidImage(t.cover_url) || 'https://ik.imagekit.io/vibecast/images/default-artist.jpg'
         }));
         const uniqueArtists = [...new Set(playlistTracks.map(t => t.artist))];
         const subtitle = uniqueArtists.slice(0, 3).join(', ') + (uniqueArtists.length > 3 ? ' and more' : '');
