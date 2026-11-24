@@ -156,7 +156,7 @@ const Profile = () => {
                 {maintenanceMode ? 'Maintenance: ON' : 'Maintenance: OFF'}
               </button>
               <button 
-                onClick={() => navigate('/Admin')}
+                onClick={() => navigate('/admin')}
                 className="flex-1 sm:flex-none px-6 py-3 bg-[#1db954] hover:bg-[#1ed760] text-black font-bold rounded-full transition-transform transform hover:scale-105 flex items-center justify-center"
               >
                 Upload Music
