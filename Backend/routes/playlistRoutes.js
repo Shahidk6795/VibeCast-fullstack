@@ -1,8 +1,11 @@
 import express from 'express';
 import * as playlistController from '../controllers/playlistController.js';
 import upload from '../middleware/upload.js';
+import { requireAuth } from '../middleware/auth.js';
 
 const router = express.Router();
+
+router.use(requireAuth);
 
 router.get('/details/:id', playlistController.fetchPlaylistDetails);
 router.post('/', playlistController.addPlaylist);

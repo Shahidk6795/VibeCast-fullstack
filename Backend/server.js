@@ -1,12 +1,15 @@
+import dotenv from 'dotenv';
+dotenv.config();
+
 import express from 'express';
 import cors from 'cors';
 import path from 'path';
 import fs from 'fs';
 import { fileURLToPath } from 'url';
-import dotenv from 'dotenv';
 import pool from './db.js';
 import * as saavn from './utils/saavnNative.js';
 
+import createAuthRouter from './routes/auth.js';
 import artistRoutes from './routes/artistRoutes.js';
 import trackRoutes from './routes/trackRoutes.js';
 import playlistRoutes from './routes/playlistRoutes.js';
@@ -15,7 +18,6 @@ import moodsRoutes from './routes/moodsRoutes.js';
 import settingsRoutes from './routes/settingsRoutes.js';
 import albumRoutes from './routes/albumRoutes.js';
 
-dotenv.config();
 const app = express();
 app.use(cors());
 app.use(express.json());
@@ -60,6 +62,7 @@ app.get('/api/search', async (req, res) => {
   }
 });
 
+app.use('/api/auth', createAuthRouter(pool));
 app.use('/api/artists', artistRoutes);
 app.use('/api/tracks', trackRoutes);
 app.use('/api/playlists', playlistRoutes);
