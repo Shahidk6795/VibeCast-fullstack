@@ -4,23 +4,23 @@ import * as THREE from 'three';
 import { BloomEffect, EffectComposer, EffectPass, RenderPass, SMAAEffect, SMAAPreset } from 'postprocessing';
 
 const Hyperspeed = ({
-effectOptions = {
+  effectOptions = {
     onSpeedUp: () => {},
     onSlowDown: () => {},
     distortion: 'mountainDistortion',
-    length: 800,                      
-    roadWidth: 22,                    
-    islandWidth: 2,                   
-    lanesPerRoad: 3,                  
-    fov: 115,                         
+    length: 800,
+    roadWidth: 22,
+    islandWidth: 2,
+    lanesPerRoad: 3,
+    fov: 115,
     fovSpeedUp: 150,
-    speedUp: 3.2,                     
-    carLightsFade: 0.3,               
-    totalSideLightSticks: 90,         
-    lightPairsPerRoadWay: 50,         
-    shoulderLinesWidthPercentage: 0.02, 
+    speedUp: 3.2,
+    carLightsFade: 0.3,
+    totalSideLightSticks: 90,
+    lightPairsPerRoadWay: 50,
+    shoulderLinesWidthPercentage: 0.02,
     brokenLinesWidthPercentage: 0.04,
-    brokenLinesLengthPercentage: 0.95, 
+    brokenLinesLengthPercentage: 0.95,
     lightStickWidth: [0.05, 0.25],
     lightStickHeight: [2.5, 4.5],
     movingAwaySpeed: [60, 100],
@@ -36,8 +36,8 @@ effectOptions = {
       background: 0x000000,
       shoulderLines: 0x5200ff,
       brokenLines: 0xffd700,
-      leftCars: [0xff00ff, 0x5200ff, 0x00ffff], 
-      rightCars: [0xffd700, 0xff8c00, 0xff4500], 
+      leftCars: [0xff00ff, 0x5200ff, 0x00ffff],
+      rightCars: [0xffd700, 0xff8c00, 0xff4500],
       sticks: 0x5200ff
     }
   }
@@ -46,13 +46,14 @@ effectOptions = {
   const appRef = useRef(null);
 
   useEffect(() => {
+    const container = hyperspeed.current;
+    if (!container) return;
+
     if (appRef.current) {
       appRef.current.dispose();
-      const container = document.getElementById('lights');
-      if (container) {
-        while (container.firstChild) {
-          container.removeChild(container.firstChild);
-        }
+      appRef.current = null;
+      while (container.firstChild) {
+        container.removeChild(container.firstChild);
       }
     }
 
@@ -409,12 +410,12 @@ effectOptions = {
         this.setSize = this.setSize.bind(this);
         this.onMouseDown = this.onMouseDown.bind(this);
         this.onMouseUp = this.onMouseUp.bind(this);
-
         this.onTouchStart = this.onTouchStart.bind(this);
         this.onTouchEnd = this.onTouchEnd.bind(this);
         this.onContextMenu = this.onContextMenu.bind(this);
+        this.onWindowResize = this.onWindowResize.bind(this);
 
-        window.addEventListener('resize', this.onWindowResize.bind(this));
+        window.addEventListener('resize', this.onWindowResize);
       }
 
       onWindowResize() {
@@ -588,7 +589,7 @@ effectOptions = {
           this.scene.clear();
         }
 
-        window.removeEventListener('resize', this.onWindowResize.bind(this));
+        window.removeEventListener('resize', this.onWindowResize);
         if (this.container) {
           this.container.removeEventListener('mousedown', this.onMouseDown);
           this.container.removeEventListener('mouseup', this.onMouseUp);
@@ -1099,19 +1100,25 @@ effectOptions = {
       return needResize;
     }
 
-    (function () {
-      const container = document.getElementById('lights');
+    try {
       const options = { ...effectOptions };
       options.distortion = distortions[options.distortion];
 
       const myApp = new App(container, options);
       appRef.current = myApp;
-      myApp.loadAssets().then(myApp.init);
-    })();
+      myApp.loadAssets().then(() => {
+        if (!myApp.disposed) myApp.init();
+      }).catch((err) => {
+        console.warn("Hyperspeed assets failed to load:", err);
+      });
+    } catch (err) {
+      console.warn("WebGL unavailable, falling back to CSS gradient:", err);
+    }
 
     return () => {
       if (appRef.current) {
         appRef.current.dispose();
+        appRef.current = null;
       }
     };
   }, [effectOptions]);

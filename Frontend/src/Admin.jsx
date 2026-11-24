@@ -49,7 +49,7 @@ const Admin = () => {
       return track.mood === filterCategory;
     }
 
-    return track.artist.toLowerCase().includes(filterCategory.toLowerCase());
+    return (track.artist || "").toLowerCase().includes(filterCategory.toLowerCase());
   });
 
   const [trackData, setTrackData] = useState({ 

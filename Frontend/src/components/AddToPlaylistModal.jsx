@@ -12,17 +12,18 @@ const AddToPlaylistModal = ({ isOpen, onClose, track }) => {
 
   useEffect(() => {
     if (isOpen && email) {
-      // FIX 1: Replaced localhost with API_URL
       fetch(`${API_URL}/api/playlists/${encodeURIComponent(email)}`)
-        .then(res => res.json())
-        .then(data => setPlaylists(data))
-        .catch(err => console.error(err));
+        .then(res => (res.ok ? res.json() : []))
+        .then(data => setPlaylists(Array.isArray(data) ? data : []))
+        .catch(err => {
+          console.error(err);
+          setPlaylists([]);
+        });
     }
   }, [isOpen, email]);
 
   const handleAddToPlaylist = async (playlistId) => {
     try {
-      // FIX 2: Replaced localhost with API_URL
       const response = await fetch(`${API_URL}/api/playlists/songs`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -32,7 +33,7 @@ const AddToPlaylistModal = ({ isOpen, onClose, track }) => {
           artist: track.artist,
           audio_url: track.path || track.audio_url,
           cover_url: track.image || track.cover_url,
-          duration: track.duration || "--:--" 
+          duration: track.duration || "--:--"
         })
       });
 
@@ -62,7 +63,7 @@ const AddToPlaylistModal = ({ isOpen, onClose, track }) => {
             <X className="w-6 h-6" />
           </button>
         </div>
-        
+
         <div className="flex items-center gap-4 mb-6 p-3 bg-white/5 rounded-xl">
           <img src={displayImage} alt={displayName} className="w-12 h-12 rounded object-cover" />
           <div className="overflow-hidden">
@@ -76,7 +77,7 @@ const AddToPlaylistModal = ({ isOpen, onClose, track }) => {
             <p className="text-gray-500 text-sm italic text-center py-4">No custom playlists found. Go create one!</p>
           ) : (
             playlists.map((playlist) => (
-              <div 
+              <div
                 key={playlist.id}
                 onClick={() => handleAddToPlaylist(playlist.id)}
                 className="flex items-center justify-between p-3 rounded-lg hover:bg-[#282828] transition-colors cursor-pointer group"

@@ -25,15 +25,19 @@ const Artists = () => {
           const res = await fetch(`${API_URL}/api/artists/default`);
           if (res.ok) {
             const data = await res.json();
-            const formatted = data.data.map(artist => ({
+            const list = Array.isArray(data?.data) ? data.data : [];
+            const formatted = list.map(artist => ({
               name: artist.name,
               image: getValidImage(artist.image),
               genre: artist.genre
             }));
             setDisplayArtists(formatted);
+          } else {
+            setDisplayArtists([]);
           }
         } catch (error) {
           console.error("Failed to load default artists:", error);
+          setDisplayArtists([]);
         } finally {
           setIsLoading(false);
         }
@@ -49,18 +53,21 @@ const Artists = () => {
         const res = await fetch(`${API_URL}/api/artists/search?query=${encodeURIComponent(searchTerm)}`);
         if (res.ok) {
           const data = await res.json();
-          const apiArtists = data.data?.results || [];
-          
+          const apiArtists = Array.isArray(data?.data?.results) ? data.data.results : [];
+
           const formatted = apiArtists.map(artist => ({
             name: artist.title || artist.name,
             image: getValidImage(artist.image),
             genre: artist.role || artist.description || "Artist"
           }));
-          
+
           setDisplayArtists(formatted);
+        } else {
+          setDisplayArtists([]);
         }
       } catch (error) {
         console.error("Failed to search artists:", error);
+        setDisplayArtists([]);
       } finally {
         setIsLoading(false);
       }
@@ -74,8 +81,8 @@ const Artists = () => {
       <div className="fixed inset-0 z-0 pointer-events-none">
         <div className="absolute inset-0 bg-[linear-gradient(to_right,#2a2a2a_1px,transparent_1px),linear-gradient(to_bottom,#2a2a2a_1px,transparent_1px)] bg-[size:4rem_4rem] [mask-image:radial-gradient(ellipse_60%_50%_at_50%_0%,#000_70%,transparent_110%)] top-1/2 transform perspective-500 rotateX(60deg) origin-top h-[150vh] opacity-30"></div>
         <div className="absolute top-0 left-0 w-full h-full overflow-hidden">
-            <div className="absolute top-[-10%] left-[20%] w-[500px] h-[500px] bg-purple-900/20 rounded-full blur-[100px] animate-pulse"></div>
-            <div className="absolute bottom-[10%] right-[10%] w-[400px] h-[400px] bg-pink-900/20 rounded-full blur-[100px] animate-pulse delay-700"></div>
+          <div className="absolute top-[-10%] left-[20%] w-[500px] h-[500px] bg-purple-900/20 rounded-full blur-[100px] animate-pulse"></div>
+          <div className="absolute bottom-[10%] right-[10%] w-[400px] h-[400px] bg-pink-900/20 rounded-full blur-[100px] animate-pulse delay-700"></div>
         </div>
       </div>
 
@@ -112,8 +119,8 @@ const Artists = () => {
 
         {isLoading ? (
           <div className="flex flex-col items-center justify-center py-20">
-              <div className="w-12 h-12 border-4 border-pink-500 border-t-transparent rounded-full animate-spin"></div>
-              <p className="text-gray-400 mt-4 font-bold tracking-widest uppercase text-sm">Loading Artists...</p>
+            <div className="w-12 h-12 border-4 border-pink-500 border-t-transparent rounded-full animate-spin"></div>
+            <p className="text-gray-400 mt-4 font-bold tracking-widest uppercase text-sm">Loading Artists...</p>
           </div>
         ) : displayArtists.length > 0 ? (
           <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-6 sm:gap-8">
@@ -154,8 +161,8 @@ const Artists = () => {
           </div>
         ) : (
           <div className="flex flex-col items-center justify-center py-20 text-gray-500">
-              <Search className="w-16 h-16 mb-4 opacity-20" />
-              <p className="text-xl font-bold">No artists found</p>
+            <Search className="w-16 h-16 mb-4 opacity-20" />
+            <p className="text-xl font-bold">No artists found</p>
           </div>
         )}
       </div>

@@ -18,17 +18,18 @@ const Profile = () => {
   const [isSwitching, setIsSwitching] = useState(false);
 
   const email = user?.primaryEmailAddress?.emailAddress;
-  const isAdmin = email === import.meta.env.VITE_ADMIN_EMAIL;
+  const adminEmail = (import.meta.env.VITE_ADMIN_EMAIL || "").trim().toLowerCase();
+  const isAdmin = Boolean(adminEmail && (email || "").trim().toLowerCase() === adminEmail);
 
   useEffect(() => {
     if (!email) return;
 
-    const fetchUserData = async () => {
-      const history = JSON.parse(localStorage.getItem('vibecast_history')) || [];
-      setRecentSongs(history);
-    };
-
-    fetchUserData();
+    try {
+      const saved = JSON.parse(localStorage.getItem('vibecast_history'));
+      setRecentSongs(Array.isArray(saved) ? saved : []);
+    } catch {
+      setRecentSongs([]);
+    }
   }, [email]);
 
   const fetchMaintenanceStatus = useCallback(async () => {
@@ -36,7 +37,7 @@ const Profile = () => {
       const res = await fetch(`${API_URL}/api/settings`);
       if (res.ok) {
         const data = await res.json();
-        setMaintenanceMode(data.maintenance_mode);
+        setMaintenanceMode(Boolean(data.maintenance_mode));
       }
     } catch {
       console.error("Failed to load settings");

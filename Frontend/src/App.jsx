@@ -26,7 +26,8 @@ const PUBLISHABLE_KEY = import.meta.env.VITE_CLERK_PUBLISHABLE_KEY;
 
 const AdminRoute = ({ children }) => {
   const { isLoaded, isSignedIn, user } = useUser();
-  const ADMIN_EMAIL = import.meta.env.VITE_ADMIN_EMAIL;
+  const adminEmail = (import.meta.env.VITE_ADMIN_EMAIL || "").trim().toLowerCase();
+  const userEmail = (user?.primaryEmailAddress?.emailAddress || "").trim().toLowerCase();
 
   if (!isLoaded) {
     return (
@@ -40,7 +41,7 @@ const AdminRoute = ({ children }) => {
     return <RedirectToSignIn />;
   }
 
-  const isAdmin = user?.primaryEmailAddress?.emailAddress === ADMIN_EMAIL;
+  const isAdmin = Boolean(adminEmail && userEmail === adminEmail);
 
   if (!isAdmin) {
     return <NotFound />;
@@ -52,14 +53,14 @@ const AdminRoute = ({ children }) => {
 function MainApp() {
   return (
     <MaintenanceGuard>
-      <PlayerProvider>
-        <BrowserRouter>
-          <div className="relative min-h-screen bg-black text-white overflow-x-hidden">
-            <ServerWakeBanner />
-            <Navbar />
+      <BrowserRouter>
+        <PlayerProvider>
+          <ErrorBoundary>
+            <div className="relative min-h-screen bg-black text-white overflow-x-hidden">
+              <ServerWakeBanner />
+              <Navbar />
 
-            <main className="pb-24 sm:pb-28">
-              <ErrorBoundary>
+              <main className="pb-24 sm:pb-28">
                 <Routes>
                   <Route path="/" element={<Home />} />
                   <Route
@@ -95,13 +96,13 @@ function MainApp() {
                   {/* Catch-all 404 page at the bottom */}
                   <Route path="*" element={<NotFound />} />
                 </Routes>
-              </ErrorBoundary>
-            </main>
+              </main>
 
-            <GlobalMiniPlayer />
-          </div>
-        </BrowserRouter>
-      </PlayerProvider>
+              <GlobalMiniPlayer />
+            </div>
+          </ErrorBoundary>
+        </PlayerProvider>
+      </BrowserRouter>
     </MaintenanceGuard>
   );
 }

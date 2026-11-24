@@ -29,9 +29,10 @@ const genreAmbience = {
   "Lo-Fi": "from-indigo-900/40 via-black to-black"
 };
 
+// Reliable Indian artists with full JioSaavn catalogs
 const vipArtistNames = [
-  "Arijit Singh", "The Weeknd", "Taylor Swift", "Diljit Dosanjh",
-  "Drake", "Shreya Ghoshal", "Badshah", "Travis Scott", "Pritam", "Dua Lipa"
+  "Arijit Singh", "Diljit Dosanjh", "Shreya Ghoshal", "Pritam",
+  "A.R. Rahman", "Badshah", "Sonu Nigam", "Atif Aslam", "Yo Yo Honey Singh", "Jubin Nautiyal"
 ];
 
 const CACHE_TTL = 10 * 60 * 1000; // 10 minutes
@@ -56,15 +57,17 @@ const setCachedData = (key, data) => {
   }
 };
 
+const shuffleList = (arr) => (Array.isArray(arr) ? [...arr].sort(() => 0.5 - Math.random()) : []);
+
 const getValidImage = (imageObj) => {
-  if (!imageObj) return 'https://ik.imagekit.io/vibecast/images/default-artist.jpg';
+  if (!imageObj) return '';
   if (typeof imageObj === 'string') return imageObj;
 
   if (Array.isArray(imageObj)) {
     const highRes = imageObj.find(img => img.quality === '500x500' || img.url?.includes('500x500'));
-    return highRes?.url || highRes?.link || imageObj[imageObj.length - 1]?.url || imageObj[imageObj.length - 1]?.link;
+    return highRes?.url || highRes?.link || imageObj[imageObj.length - 1]?.url || imageObj[imageObj.length - 1]?.link || '';
   }
-  return imageObj.url || imageObj.link || 'https://ik.imagekit.io/vibecast/images/default-artist.jpg';
+  return imageObj.url || imageObj.link || '';
 };
 
 const getValidAudio = (audioObj) => {
@@ -128,7 +131,7 @@ const Home = () => {
   const fetchTracks = useCallback(async () => {
     const cached = getCachedData('vc_home_tracks');
     if (cached) {
-      const shuffled = [...cached].sort(() => 0.5 - Math.random());
+      const shuffled = shuffleList(cached);
       setAllTracks(shuffled);
       setDbTracks(shuffled);
       return;
@@ -139,7 +142,7 @@ const Home = () => {
       if (response.ok) {
         const data = await response.json();
         setCachedData('vc_home_tracks', data);
-        const shuffled = [...data].sort(() => 0.5 - Math.random());
+        const shuffled = shuffleList(data);
         setAllTracks(shuffled);
         setDbTracks(shuffled);
       }
@@ -149,28 +152,39 @@ const Home = () => {
   }, []);
 
   const fetchLiveVIPArtists = useCallback(async () => {
-    const cached = getCachedData('vc_home_artists');
+    const cached = getCachedData('vc_home_artists_v2');
     if (cached) {
       setAllArtists(cached);
-      setHomeArtists([...cached].sort(() => 0.5 - Math.random()));
+      setHomeArtists(shuffleList(cached));
       return;
     }
 
     try {
       const promises = vipArtistNames.map(name =>
-        fetch(`${API_URL}/api/artists/search?query=${encodeURIComponent(name)}`).then(res => res.json())
+        fetch(`${API_URL}/api/artists/search?query=${encodeURIComponent(name)}`)
+          .then(res => (res.ok ? res.json() : null))
+          .catch(() => null)
       );
       const results = await Promise.all(promises);
-      const liveArtists = results.map((res, idx) => {
-        const artistObj = res.data?.results?.[0];
-        return {
-          name: artistObj?.title || artistObj?.name || vipArtistNames[idx],
-          image: getValidImage(artistObj?.image)
-        };
-      });
-      setCachedData('vc_home_artists', liveArtists);
-      setAllArtists(liveArtists);
-      setHomeArtists([...liveArtists].sort(() => 0.5 - Math.random()));
+
+      // Filter out any artist that didn't return a valid result or image
+      const liveArtists = results
+        .map((res, idx) => {
+          const artistObj = res?.data?.results?.[0];
+          const image = getValidImage(artistObj?.image);
+          if (!artistObj || !image) return null;
+          return {
+            name: artistObj.title || artistObj.name || vipArtistNames[idx],
+            image
+          };
+        })
+        .filter(Boolean);
+
+      if (liveArtists.length > 0) {
+        setCachedData('vc_home_artists_v2', liveArtists);
+        setAllArtists(liveArtists);
+        setHomeArtists(shuffleList(liveArtists));
+      }
     } catch (error) {
       console.error("Error fetching live VIP artists:", error);
     }
@@ -179,9 +193,9 @@ const Home = () => {
   const fetchHomeModules = useCallback(async () => {
     const cached = getCachedData('vc_home_modules_v2');
     if (cached) {
-      setTrendingAlbums(cached.trending || []);
-      setTopCharts(cached.charts || []);
-      setNewReleases(cached.releases || []);
+      setTrendingAlbums(shuffleList(cached.trending));
+      setTopCharts(shuffleList(cached.charts));
+      setNewReleases(shuffleList(cached.releases));
       return;
     }
 
@@ -200,9 +214,9 @@ const Home = () => {
         const releases = Array.isArray(rawReleases) ? rawReleases : [];
 
         setCachedData('vc_home_modules_v2', { trending, charts, releases });
-        setTrendingAlbums(trending);
-        setTopCharts(charts);
-        setNewReleases(releases);
+        setTrendingAlbums(shuffleList(trending));
+        setTopCharts(shuffleList(charts));
+        setNewReleases(shuffleList(releases));
       }
     } catch (error) {
       console.error("Error fetching home modules:", error);
@@ -222,15 +236,15 @@ const Home = () => {
   const handleGenreClick = (genre) => {
     setActiveGenre(genre);
     if (genre === "All") {
-      setDbTracks([...allTracks].sort(() => 0.5 - Math.random()));
-      setHomeArtists([...allArtists].sort(() => 0.5 - Math.random()));
+      setDbTracks(shuffleList(allTracks));
+      setHomeArtists(shuffleList(allArtists));
     } else {
       const filteredTracks = allTracks.filter(track => track.genre && track.genre.toLowerCase() === genre.toLowerCase());
-      const validArtistNames = filteredTracks.map(t => t.artist.toLowerCase());
+      const validArtistNames = filteredTracks.map(t => (t.artist || "").toLowerCase());
       const filteredArtists = allArtists.filter(artist => validArtistNames.some(validName => validName.includes(artist.name.toLowerCase())));
 
-      setDbTracks(filteredTracks.length > 0 ? filteredTracks : [...allTracks].sort(() => 0.5 - Math.random()));
-      setHomeArtists(filteredArtists.length > 0 ? filteredArtists : [...allArtists].sort(() => 0.5 - Math.random()));
+      setDbTracks(filteredTracks.length > 0 ? filteredTracks : shuffleList(allTracks));
+      setHomeArtists(filteredArtists.length > 0 ? filteredArtists : shuffleList(allArtists));
     }
   };
 
@@ -247,9 +261,9 @@ const Home = () => {
     const activeMixes = [];
     for (let i = 0; i < mixThemes.length; i++) {
       if (sourceTracks.length >= 5) {
-        const shuffled = [...sourceTracks].sort(() => 0.5 - Math.random());
+        const shuffled = shuffleList(sourceTracks);
         const playlistTracks = shuffled.slice(0, 12).map(t => ({
-          name: t.title, artist: t.artist, path: getValidAudio(t.audio_url), image: getValidImage(t.cover_url)
+          name: t.title, artist: t.artist, path: getValidAudio(t.audio_url), image: getValidImage(t.cover_url) || 'https://ik.imagekit.io/vibecast/images/default-artist.jpg'
         }));
         const uniqueArtists = [...new Set(playlistTracks.map(t => t.artist))];
         const subtitle = uniqueArtists.slice(0, 3).join(', ') + (uniqueArtists.length > 3 ? ' and more' : '');
@@ -374,85 +388,94 @@ const Home = () => {
         )}
 
         {trendingAlbums.length > 0 && (
-          <section className="mb-14">
+          <section className="mb-14 overflow-hidden relative">
             <h2 className="text-2xl font-bold mb-5 text-white flex items-center gap-2">
               <Flame className="w-6 h-6 text-orange-500" /> Trending Albums
             </h2>
-            <div className="flex gap-5 overflow-x-auto pb-4 scrollbar-hide snap-x">
-              {trendingAlbums.map((album, idx) => {
-                const albumTitle = (album.name || album.title || "Unknown Album").replace(/&quot;/g, '"');
-                return (
-                  <div
-                    key={album.id || idx}
-                    onClick={() => navigate(`/album/${album.id}`, { state: { type: 'album', image: getValidImage(album.image), title: albumTitle } })}
-                    className="snap-start flex-shrink-0 w-36 sm:w-44 group flex flex-col gap-2 cursor-pointer transition-all duration-300"
-                  >
-                    <div className="relative w-full aspect-square rounded-lg overflow-hidden shadow-lg bg-[#181818]">
-                      <img src={getValidImage(album.image)} alt={albumTitle} loading="lazy" className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105" />
+            <div className="ticker-wrapper relative overflow-hidden group mask-gradient">
+              <div className="ticker-content flex space-x-5 animate-ticker" style={{ animationDuration: '90s' }}>
+                {trendingAlbums.concat(trendingAlbums).map((album, idx) => {
+                  const albumTitle = (album.name || album.title || "Unknown Album").replace(/&quot;/g, '"');
+                  const albumImg = getValidImage(album.image) || 'https://ik.imagekit.io/vibecast/images/default-artist.jpg';
+                  return (
+                    <div
+                      key={`${album.id || idx}-${idx}`}
+                      onClick={() => navigate(`/album/${album.id}`, { state: { type: 'album', image: albumImg, title: albumTitle } })}
+                      className="flex-shrink-0 w-36 sm:w-44 group/card flex flex-col gap-2 cursor-pointer transition-all duration-300"
+                    >
+                      <div className="relative w-full aspect-square rounded-lg overflow-hidden shadow-lg bg-[#181818]">
+                        <img src={albumImg} alt={albumTitle} loading="lazy" className="w-full h-full object-cover transition-transform duration-500 group-hover/card:scale-105" />
+                      </div>
+                      <div className="flex flex-col px-1">
+                        <p className="font-bold text-[15px] leading-tight text-white truncate group-hover/card:text-[#1db954] transition-colors">{albumTitle}</p>
+                        <p className="text-gray-400 text-xs truncate mt-1">{getArtistName(album)}</p>
+                      </div>
                     </div>
-                    <div className="flex flex-col px-1">
-                      <p className="font-bold text-[15px] leading-tight text-white truncate group-hover:text-[#1db954] transition-colors">{albumTitle}</p>
-                      <p className="text-gray-400 text-xs truncate mt-1">{getArtistName(album)}</p>
-                    </div>
-                  </div>
-                );
-              })}
+                  );
+                })}
+              </div>
             </div>
           </section>
         )}
 
         {newReleases.length > 0 && (
-          <section className="mb-14">
+          <section className="mb-14 overflow-hidden relative">
             <h2 className="text-2xl font-bold mb-5 text-white flex items-center gap-2">
               <Radio className="w-6 h-6 text-purple-500" /> New Releases
             </h2>
-            <div className="flex gap-5 overflow-x-auto pb-4 scrollbar-hide snap-x">
-              {newReleases.map((album) => {
-                const albumTitle = (album.name || album.title || "Unknown Album").replace(/&quot;/g, '"');
-                return (
-                  <div
-                    key={album.id}
-                    onClick={() => navigate(`/album/${album.id}`, { state: { type: 'album', image: getValidImage(album.image), title: albumTitle, year: album.year } })}
-                    className="snap-start flex-shrink-0 w-36 sm:w-44 group flex flex-col gap-2 cursor-pointer transition-all duration-300"
-                  >
-                    <div className="relative w-full aspect-square rounded-lg overflow-hidden shadow-lg bg-[#181818]">
-                      <img src={getValidImage(album.image)} alt={albumTitle} loading="lazy" className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105" />
+            <div className="ticker-wrapper relative overflow-hidden group mask-gradient">
+              <div className="ticker-content flex space-x-5 animate-ticker" style={{ animationDuration: '90s' }}>
+                {newReleases.concat(newReleases).map((album, idx) => {
+                  const albumTitle = (album.name || album.title || "Unknown Album").replace(/&quot;/g, '"');
+                  const albumImg = getValidImage(album.image) || 'https://ik.imagekit.io/vibecast/images/default-artist.jpg';
+                  return (
+                    <div
+                      key={`${album.id || idx}-${idx}`}
+                      onClick={() => navigate(`/album/${album.id}`, { state: { type: 'album', image: albumImg, title: albumTitle, year: album.year } })}
+                      className="flex-shrink-0 w-36 sm:w-44 group/card flex flex-col gap-2 cursor-pointer transition-all duration-300"
+                    >
+                      <div className="relative w-full aspect-square rounded-lg overflow-hidden shadow-lg bg-[#181818]">
+                        <img src={albumImg} alt={albumTitle} loading="lazy" className="w-full h-full object-cover transition-transform duration-500 group-hover/card:scale-105" />
+                      </div>
+                      <div className="flex flex-col px-1">
+                        <p className="font-bold text-[15px] leading-tight text-white truncate group-hover/card:text-[#1db954] transition-colors">{albumTitle}</p>
+                        <p className="text-gray-400 text-xs truncate mt-1">{getArtistName(album)}</p>
+                      </div>
                     </div>
-                    <div className="flex flex-col px-1">
-                      <p className="font-bold text-[15px] leading-tight text-white truncate group-hover:text-[#1db954] transition-colors">{albumTitle}</p>
-                      <p className="text-gray-400 text-xs truncate mt-1">{getArtistName(album)}</p>
-                    </div>
-                  </div>
-                );
-              })}
+                  );
+                })}
+              </div>
             </div>
           </section>
         )}
 
         {topCharts.length > 0 && (
-          <section className="mb-14">
+          <section className="mb-14 overflow-hidden relative">
             <h2 className="text-2xl font-bold mb-5 text-white flex items-center gap-2">
               <BarChart2 className="w-6 h-6 text-blue-500" /> Top Charts
             </h2>
-            <div className="flex gap-5 overflow-x-auto pb-4 scrollbar-hide snap-x">
-              {topCharts.map((chart) => {
-                const chartTitle = (chart.title || chart.name || "Chart").replace(/&quot;/g, '"');
-                return (
-                  <div
-                    key={chart.id}
-                    onClick={() => navigate(`/album/${chart.id}`, { state: { type: chart.type || 'playlist', image: getValidImage(chart.image), title: chartTitle } })}
-                    className="snap-start flex-shrink-0 w-36 sm:w-44 group flex flex-col gap-2 cursor-pointer transition-all duration-300"
-                  >
-                    <div className="relative w-full aspect-square rounded-lg overflow-hidden shadow-lg bg-[#181818]">
-                      <img src={getValidImage(chart.image)} alt={chartTitle} loading="lazy" className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105" />
+            <div className="ticker-wrapper relative overflow-hidden group mask-gradient">
+              <div className="ticker-content flex space-x-5 animate-ticker" style={{ animationDuration: '90s' }}>
+                {topCharts.concat(topCharts).map((chart, idx) => {
+                  const chartTitle = (chart.title || chart.name || "Chart").replace(/&quot;/g, '"');
+                  const chartImg = getValidImage(chart.image) || 'https://ik.imagekit.io/vibecast/images/default-artist.jpg';
+                  return (
+                    <div
+                      key={`${chart.id || idx}-${idx}`}
+                      onClick={() => navigate(`/album/${chart.id}`, { state: { type: chart.type || 'playlist', image: chartImg, title: chartTitle } })}
+                      className="flex-shrink-0 w-36 sm:w-44 group/card flex flex-col gap-2 cursor-pointer transition-all duration-300"
+                    >
+                      <div className="relative w-full aspect-square rounded-lg overflow-hidden shadow-lg bg-[#181818]">
+                        <img src={chartImg} alt={chartTitle} loading="lazy" className="w-full h-full object-cover transition-transform duration-500 group-hover/card:scale-105" />
+                      </div>
+                      <div className="flex flex-col px-1">
+                        <p className="font-bold text-[15px] leading-tight text-white truncate group-hover/card:text-[#1db954] transition-colors">{chartTitle}</p>
+                        <p className="text-gray-400 text-xs truncate mt-1 capitalize">{getArtistName(chart)}</p>
+                      </div>
                     </div>
-                    <div className="flex flex-col px-1">
-                      <p className="font-bold text-[15px] leading-tight text-white truncate group-hover:text-[#1db954] transition-colors">{chartTitle}</p>
-                      <p className="text-gray-400 text-xs truncate mt-1 capitalize">{getArtistName(chart)}</p>
-                    </div>
-                  </div>
-                );
-              })}
+                  );
+                })}
+              </div>
             </div>
           </section>
         )}

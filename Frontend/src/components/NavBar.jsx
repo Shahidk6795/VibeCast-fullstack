@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
-import { User, Home, Disc, Flame, Search, Upload, LayoutDashboard } from "lucide-react"; 
+import { User, Home, Disc, Flame, Search, Upload, LayoutDashboard } from "lucide-react";
 import { useUser, useClerk } from "@clerk/clerk-react";
 import logo from "../assets/logo.png";
 
@@ -8,12 +8,13 @@ const Navbar = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const [scrolled, setScrolled] = useState(false);
-  
+
   const { user, isSignedIn } = useUser();
   const { openSignIn } = useClerk();
-  
-  const ADMIN_EMAIL = import.meta.env.VITE_ADMIN_EMAIL; 
-  const isAdmin = isSignedIn && user?.primaryEmailAddress?.emailAddress === ADMIN_EMAIL;
+
+  const adminEmail = (import.meta.env.VITE_ADMIN_EMAIL || "").trim().toLowerCase();
+  const userEmail = (user?.primaryEmailAddress?.emailAddress || "").trim().toLowerCase();
+  const isAdmin = Boolean(isSignedIn && adminEmail && userEmail === adminEmail);
 
   useEffect(() => {
     const handleScroll = () => {
@@ -26,36 +27,35 @@ const Navbar = () => {
   const navItems = [
     { name: "Home", path: "/", icon: Home },
     { name: "Search", path: "/search", icon: Search },
-    { name: "Artists", path: "/artists", icon: Disc }, 
-    { name: "Trending", path: "/trending", icon: Flame }, 
+    { name: "Artists", path: "/artists", icon: Disc },
+    { name: "Trending", path: "/trending", icon: Flame },
     ...(isAdmin ? [{ name: "Studio", path: "/admin", icon: Upload }] : []),
-    // Fix: Allow all signed-in users (including admins) to see the Profile tab
     ...(isSignedIn ? [{ name: "Profile", path: "/profile", icon: LayoutDashboard }] : [])
   ];
 
   const getDesktopClass = (path) =>
     location.pathname === path
-      ? "text-white after:w-full font-bold drop-shadow-[0_0_8px_rgba(236,72,153,0.8)]" 
+      ? "text-white after:w-full font-bold drop-shadow-[0_0_8px_rgba(236,72,153,0.8)]"
       : "text-gray-400 after:w-0 hover:text-white";
 
-  const getMobileClass = (path) => 
+  const getMobileClass = (path) =>
     location.pathname === path
       ? "text-pink-500 scale-110 drop-shadow-[0_0_10px_rgba(236,72,153,0.6)]"
       : "text-gray-500 hover:text-white";
 
   return (
     <>
-      <header 
+      <header
         className={`sticky top-0 z-40 w-full transition-all duration-300 ${
-          scrolled 
-            ? "bg-black/80 backdrop-blur-xl border-b border-white/10 shadow-lg py-2" 
+          scrolled
+            ? "bg-black/80 backdrop-blur-xl border-b border-white/10 shadow-lg py-2"
             : "bg-transparent py-4"
         }`}
       >
         <div className="absolute top-0 left-0 w-full h-[1px] bg-gradient-to-r from-transparent via-pink-500 to-transparent opacity-50"></div>
 
         <div className="max-w-7xl mx-auto px-6 flex items-center justify-between gap-4">
-          
+
           <div
             className="flex items-center cursor-pointer gap-3 group"
             onClick={() => navigate("/")}
@@ -86,7 +86,6 @@ const Navbar = () => {
 
           <div className="flex items-center gap-4 flex-1 justify-end md:flex-none">
             <button
-              // Fix: Trigger Clerk Sign-In if not authenticated
               onClick={() => {
                 if (isSignedIn) {
                   navigate("/profile");
@@ -100,9 +99,9 @@ const Navbar = () => {
               <div className="absolute -inset-0.5 bg-gradient-to-tr from-pink-500 to-purple-600 rounded-full opacity-70 group-hover:opacity-100 blur transition duration-300"></div>
               <div className="relative w-9 h-9 bg-[#121212] rounded-full flex items-center justify-center border border-white/10 overflow-hidden">
                 {isSignedIn ? (
-                    <img src={user.imageUrl} alt="Profile" className="w-full h-full object-cover" />
+                  <img src={user.imageUrl} alt="Profile" className="w-full h-full object-cover" />
                 ) : (
-                    <User className="w-5 h-5 text-gray-300 group-hover:text-white transition-colors" />
+                  <User className="w-5 h-5 text-gray-300 group-hover:text-white transition-colors" />
                 )}
               </div>
             </button>
