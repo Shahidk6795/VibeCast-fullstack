@@ -9,6 +9,8 @@ import LikedSongsCard from "@/components/LikedSongsCard";
 import PlaylistManager from "@/components/PlaylistManager";
 import { API_URL } from '../config.js';
 
+const DEFAULT_ARTIST_IMG = 'https://ik.imagekit.io/vibecast/images/default-artist.jpg';
+
 const moods = [
   { id: "workout", title: "Iron Paradise", desc: "Pure Adrenaline.", icon: Dumbbell, color: "from-red-600 to-black", textColor: "text-red-500" },
   { id: "relax", title: "Zen Mode", desc: "Lo-Fi & Chill.", icon: Coffee, color: "from-emerald-600 to-black", textColor: "text-emerald-400" },
@@ -59,15 +61,27 @@ const setCachedData = (key, data) => {
 
 const shuffleList = (arr) => (Array.isArray(arr) ? [...arr].sort(() => 0.5 - Math.random()) : []);
 
+const isBrokenJioSaavnDefault = (url = "") =>
+  typeof url === "string" && url.includes("jiosaavn.com/_i/3.0/");
+
 const getValidImage = (imageObj) => {
   if (!imageObj) return '';
-  if (typeof imageObj === 'string') return imageObj;
+  let rawUrl = '';
 
-  if (Array.isArray(imageObj)) {
+  if (typeof imageObj === 'string') {
+    rawUrl = imageObj;
+  } else if (Array.isArray(imageObj)) {
     const highRes = imageObj.find(img => img.quality === '500x500' || img.url?.includes('500x500'));
-    return highRes?.url || highRes?.link || imageObj[imageObj.length - 1]?.url || imageObj[imageObj.length - 1]?.link || '';
+    rawUrl = highRes?.url || highRes?.link || imageObj[imageObj.length - 1]?.url || imageObj[imageObj.length - 1]?.link || '';
+  } else {
+    rawUrl = imageObj.url || imageObj.link || '';
   }
-  return imageObj.url || imageObj.link || '';
+
+  if (!rawUrl || rawUrl === "[object Object]" || isBrokenJioSaavnDefault(rawUrl)) {
+    return '';
+  }
+
+  return rawUrl;
 };
 
 const getValidAudio = (audioObj) => {
@@ -165,7 +179,7 @@ const Home = () => {
   }, []);
 
   const fetchLiveVIPArtists = useCallback(async () => {
-    const cached = getCachedData('vc_home_artists_v3');
+    const cached = getCachedData('vc_home_artists_v4');
     if (cached) {
       setAllArtists(cached);
       setHomeArtists(shuffleList(cached));
@@ -194,7 +208,7 @@ const Home = () => {
         .filter(Boolean);
 
       if (liveArtists.length > 0) {
-        setCachedData('vc_home_artists_v3', liveArtists);
+        setCachedData('vc_home_artists_v4', liveArtists);
         setAllArtists(liveArtists);
         setHomeArtists(shuffleList(liveArtists));
       }
@@ -281,7 +295,7 @@ const Home = () => {
           name: t.title,
           artist: getCleanArtistName(t.artist) || t.artist || "Various Artists",
           path: getValidAudio(t.audio_url),
-          image: getValidImage(t.cover_url) || 'https://ik.imagekit.io/vibecast/images/default-artist.jpg'
+          image: getValidImage(t.cover_url) || DEFAULT_ARTIST_IMG
         }));
         const uniqueArtists = [...new Set(playlistTracks.map(t => t.artist))];
         const subtitle = uniqueArtists.slice(0, 3).join(', ') + (uniqueArtists.length > 3 ? ' and more' : '');
@@ -414,7 +428,7 @@ const Home = () => {
               <div className="ticker-content flex space-x-5 animate-ticker" style={{ animationDuration: '90s' }}>
                 {trendingAlbums.concat(trendingAlbums).map((album, idx) => {
                   const albumTitle = (album.name || album.title || "Unknown Album").replace(/&quot;/g, '"');
-                  const albumImg = getValidImage(album.image) || 'https://ik.imagekit.io/vibecast/images/default-artist.jpg';
+                  const albumImg = getValidImage(album.image) || DEFAULT_ARTIST_IMG;
                   return (
                     <div
                       key={`${album.id || idx}-${idx}`}
@@ -445,7 +459,7 @@ const Home = () => {
               <div className="ticker-content flex space-x-5 animate-ticker" style={{ animationDuration: '90s' }}>
                 {newReleases.concat(newReleases).map((album, idx) => {
                   const albumTitle = (album.name || album.title || "Unknown Album").replace(/&quot;/g, '"');
-                  const albumImg = getValidImage(album.image) || 'https://ik.imagekit.io/vibecast/images/default-artist.jpg';
+                  const albumImg = getValidImage(album.image) || DEFAULT_ARTIST_IMG;
                   return (
                     <div
                       key={`${album.id || idx}-${idx}`}
@@ -476,7 +490,7 @@ const Home = () => {
               <div className="ticker-content flex space-x-5 animate-ticker" style={{ animationDuration: '90s' }}>
                 {topCharts.concat(topCharts).map((chart, idx) => {
                   const chartTitle = (chart.title || chart.name || "Chart").replace(/&quot;/g, '"');
-                  const chartImg = getValidImage(chart.image) || 'https://ik.imagekit.io/vibecast/images/default-artist.jpg';
+                  const chartImg = getValidImage(chart.image) || DEFAULT_ARTIST_IMG;
                   return (
                     <div
                       key={`${chart.id || idx}-${idx}`}

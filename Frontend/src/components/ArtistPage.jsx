@@ -6,6 +6,8 @@ import AddToPlaylistModal from "@/components/AddToPlaylistModal";
 import { API_URL } from "../config.js";
 import { FastAverageColor } from "fast-average-color";
 
+const DEFAULT_ARTIST_IMG = 'https://ik.imagekit.io/vibecast/images/default-artist.jpg';
+
 const formatTime = (sec) => {
   if (!sec) return "0:00";
   const minutes = Math.floor(sec / 60);
@@ -13,14 +15,23 @@ const formatTime = (sec) => {
   return `${minutes}:${seconds}`;
 };
 
+const isBrokenJioSaavnDefault = (url = "") =>
+  typeof url === "string" && url.includes("jiosaavn.com/_i/3.0/");
+
 const getValidImage = (imageObj) => {
-  if (!imageObj) return 'https://ik.imagekit.io/VibeCast/images/default-artist.jpg';
+  if (!imageObj) return DEFAULT_ARTIST_IMG;
   if (typeof imageObj === 'string') {
-    if (imageObj === "[object Object]") return 'https://ik.imagekit.io/VibeCast/images/default-artist.jpg';
+    if (imageObj === "[object Object]" || isBrokenJioSaavnDefault(imageObj)) {
+      return DEFAULT_ARTIST_IMG;
+    }
     return imageObj;
   }
-  if (Array.isArray(imageObj)) return imageObj[imageObj.length - 1]?.url || imageObj[imageObj.length - 1]?.link || imageObj[0]?.url;
-  return imageObj.url || imageObj.link || 'https://ik.imagekit.io/VibeCast/images/default-artist.jpg';
+  if (Array.isArray(imageObj)) {
+    const url = imageObj[imageObj.length - 1]?.url || imageObj[imageObj.length - 1]?.link || imageObj[0]?.url;
+    return !url || isBrokenJioSaavnDefault(url) ? DEFAULT_ARTIST_IMG : url;
+  }
+  const url = imageObj.url || imageObj.link;
+  return !url || isBrokenJioSaavnDefault(url) ? DEFAULT_ARTIST_IMG : url;
 };
 
 const getValidAudio = (audioObj) => {
@@ -94,10 +105,13 @@ const ArtistPage = () => {
 
   let passedImage = location.state?.image;
   if (typeof passedImage === 'object') passedImage = getValidImage(passedImage);
+  if (typeof passedImage === 'string' && isBrokenJioSaavnDefault(passedImage)) {
+    passedImage = DEFAULT_ARTIST_IMG;
+  }
   
   const finalImage = passedImage && passedImage !== "[object Object]" 
     ? passedImage 
-    : (dbArtistData?.image_url || "https://ik.imagekit.io/VibeCast/images/default-artist.jpg");
+    : (dbArtistData?.image_url || DEFAULT_ARTIST_IMG);
 
   useEffect(() => {
     if (!finalImage || finalImage.includes('placehold') || finalImage.includes('default')) return;
@@ -152,7 +166,6 @@ const ArtistPage = () => {
               ""
             ).toLowerCase().replace(/\$/g, 's');
 
-            // Allow empty metadata on foreign catalog items, but reject tracks credited to a different artist
             if (singerStr && !singerStr.includes(coreArtistTarget)) continue;
 
             const audioPath = getValidAudio(song.downloadUrl || song.url);
