@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useContext } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
-import { User, Home, Disc, Flame, Search, Upload, LayoutDashboard } from "lucide-react";
+import { User, Home, Disc, Flame, Search, LayoutDashboard } from "lucide-react";
 import { AuthContext } from "../context/AuthContext";
 import logo from "../assets/logo.png";
 
@@ -9,7 +9,7 @@ const Navbar = () => {
   const location = useLocation();
   const [scrolled, setScrolled] = useState(false);
 
-  const { user, isSignedIn, isAdmin, openAuthModal } = useContext(AuthContext) || {};
+  const { user, isSignedIn, openAuthModal } = useContext(AuthContext) || {};
 
   useEffect(() => {
     const handleScroll = () => {
@@ -24,7 +24,6 @@ const Navbar = () => {
     { name: "Search", path: "/search", icon: Search },
     { name: "Artists", path: "/artists", icon: Disc },
     { name: "Trending", path: "/trending", icon: Flame },
-    ...(isAdmin ? [{ name: "Studio", path: "/admin", icon: Upload }] : []),
     ...(isSignedIn ? [{ name: "Profile", path: "/profile", icon: LayoutDashboard }] : [])
   ];
 

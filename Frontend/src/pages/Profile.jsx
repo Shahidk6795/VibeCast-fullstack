@@ -147,14 +147,14 @@ const Profile = () => {
               <h2 className="text-xl font-bold text-white flex items-center gap-2">
                 <ShieldAlert className="w-5 h-5 text-[#1db954]" /> Admin Dashboard
               </h2>
-              <p className="text-gray-400 text-sm mt-1">Manage global tracks and application status.</p>
+              <p className="text-gray-400 text-sm mt-1">Manage application status and maintenance mode.</p>
             </div>
-            <div className="flex flex-col sm:flex-row gap-4 w-full md:w-auto">
+            <div className="flex w-full md:w-auto">
               <button
                 type="button"
                 onClick={toggleMaintenance}
                 disabled={isSwitching}
-                className={`flex-1 sm:flex-none px-6 py-3 font-bold rounded-full transition-all flex items-center justify-center gap-2 ${
+                className={`w-full md:w-auto px-6 py-3 font-bold rounded-full transition-all flex items-center justify-center gap-2 cursor-pointer ${
                   maintenanceMode
                     ? 'bg-red-500/20 text-red-500 border border-red-500/50 hover:bg-red-500 hover:text-white'
                     : 'bg-black/50 text-gray-300 border border-white/10 hover:bg-white hover:text-black'
@@ -162,13 +162,6 @@ const Profile = () => {
               >
                 <Power className="w-4 h-4" />
                 {maintenanceMode ? 'Maintenance: ON' : 'Maintenance: OFF'}
-              </button>
-              <button
-                type="button"
-                onClick={() => navigate('/admin')}
-                className="flex-1 sm:flex-none px-6 py-3 bg-[#1db954] hover:bg-[#1ed760] text-black font-bold rounded-full transition-transform transform hover:scale-105 flex items-center justify-center"
-              >
-                Upload Music
               </button>
             </div>
           </div>

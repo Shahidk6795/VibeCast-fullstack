@@ -15,7 +15,6 @@ import ArtistPage from "./components/ArtistPage";
 import GlobalMiniPlayer from "./components/GlobalMiniPlayer";
 import { PlayerProvider } from "./context/PlayerContext";
 import { AuthProvider, AuthContext } from "./context/AuthContext";
-import Admin from "./Admin";
 import Profile from "./pages/Profile";
 import LikedSongsPage from "./components/LikedSongsPage";
 import CustomPlaylistPage from "./pages/CustomPlaylistPage";
@@ -50,36 +49,6 @@ const RequireAuth = ({ children, loadingText = "Loading..." }) => {
   return children;
 };
 
-const AdminRoute = ({ children }) => {
-  const { isLoaded, isSignedIn, isAdmin } = useContext(AuthContext) || {};
-  const navigate = useNavigate();
-  const location = useLocation();
-
-  useEffect(() => {
-    if (isLoaded && !isSignedIn) {
-      navigate("/login", { replace: true, state: { from: location.pathname } });
-    }
-  }, [isLoaded, isSignedIn, navigate, location.pathname]);
-
-  if (!isLoaded) {
-    return (
-      <div className="min-h-screen bg-black flex items-center justify-center text-[#1db954] font-semibold">
-        Loading Studio...
-      </div>
-    );
-  }
-
-  if (!isSignedIn) {
-    return null;
-  }
-
-  if (!isAdmin) {
-    return <NotFound />;
-  }
-
-  return children;
-};
-
 function AppShell() {
   const { authModalOpen, closeAuthModal } = useContext(AuthContext) || {};
   const location = useLocation();
@@ -105,14 +74,6 @@ function AppShell() {
         <Routes>
           <Route path="/" element={<Home />} />
           <Route path="/login" element={<AuthPage />} />
-          <Route
-            path="/admin"
-            element={
-              <AdminRoute>
-                <Admin />
-              </AdminRoute>
-            }
-          />
           <Route
             path="/profile"
             element={
