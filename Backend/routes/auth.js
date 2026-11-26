@@ -37,7 +37,7 @@ export default function createAuthRouter(pool) {
         [name, email, passwordHash]
       );
 
-      const user = { id: result.insertId, name, email, role: "user" };
+      const user = { id: result.insertId, name, email, role: "user", imageUrl: null };
       const token = signToken(user);
 
       return res.status(201).json({ token, user });
@@ -57,7 +57,7 @@ export default function createAuthRouter(pool) {
       }
 
       const [rows] = await pool.query(
-        "SELECT id, name, email, password_hash, role FROM users WHERE email = ?",
+        "SELECT id, name, email, password_hash, role, avatar_url FROM users WHERE email = ?",
         [email]
       );
       if (rows.length === 0) {
@@ -74,7 +74,13 @@ export default function createAuthRouter(pool) {
         return res.status(401).json({ error: "Invalid email or password" });
       }
 
-      const user = { id: dbUser.id, name: dbUser.name, email: dbUser.email, role: dbUser.role };
+      const user = {
+        id: dbUser.id,
+        name: dbUser.name,
+        email: dbUser.email,
+        role: dbUser.role,
+        imageUrl: dbUser.avatar_url || null,
+      };
       const token = signToken(user);
 
       return res.json({ token, user });
@@ -99,25 +105,36 @@ export default function createAuthRouter(pool) {
       const payload = ticket.getPayload();
       const email = String(payload?.email || "").trim().toLowerCase();
       const name = String(payload?.name || email.split("@")[0] || "Music Lover").trim();
+      const picture = String(payload?.picture || "").trim() || null;
 
       if (!email || payload?.email_verified === false) {
         return res.status(400).json({ error: "Verified Google email required" });
       }
 
       const [existing] = await pool.query(
-        "SELECT id, name, email, role FROM users WHERE email = ?",
+        "SELECT id, name, email, role, avatar_url FROM users WHERE email = ?",
         [email]
       );
 
       let user;
       if (existing.length > 0) {
-        user = existing[0];
+        const dbUser = existing[0];
+        if (picture && picture !== dbUser.avatar_url) {
+          await pool.query("UPDATE users SET avatar_url = ? WHERE id = ?", [picture, dbUser.id]);
+        }
+        user = {
+          id: dbUser.id,
+          name: dbUser.name,
+          email: dbUser.email,
+          role: dbUser.role,
+          imageUrl: picture || dbUser.avatar_url || null,
+        };
       } else {
         const [result] = await pool.query(
-          "INSERT INTO users (name, email, password_hash, role) VALUES (?, ?, NULL, 'user')",
-          [name, email]
+          "INSERT INTO users (name, email, password_hash, role, avatar_url) VALUES (?, ?, NULL, 'user', ?)",
+          [name, email, picture]
         );
-        user = { id: result.insertId, name, email, role: "user" };
+        user = { id: result.insertId, name, email, role: "user", imageUrl: picture };
       }
 
       const token = signToken(user);
@@ -131,7 +148,7 @@ export default function createAuthRouter(pool) {
   router.get("/me", requireAuth, async (req, res) => {
     try {
       const [rows] = await pool.query(
-        "SELECT id, name, email, role, created_at FROM users WHERE id = ?",
+        "SELECT id, name, email, role, avatar_url AS imageUrl, created_at FROM users WHERE id = ?",
         [req.user.id]
       );
       if (rows.length === 0) {
