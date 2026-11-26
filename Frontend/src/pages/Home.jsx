@@ -127,24 +127,35 @@ const Home = () => {
 
   const { user } = useContext(AuthContext) || {};
   const firstName = user?.name ? user.name.trim().split(/\s+/)[0] : "";
+  const recentKey = user?.email
+    ? `vibecast_recently_played_${user.email.toLowerCase()}`
+    : "vibecast_recently_played_guest";
+
   const navigate = useNavigate();
   const { playPlaylist } = useContext(PlayerContext) || {};
 
   useEffect(() => {
-    const savedRecents = localStorage.getItem('vibecast_recently_played');
+    const savedRecents = localStorage.getItem(recentKey);
     if (savedRecents) {
-      try { setRecentlyPlayed(JSON.parse(savedRecents)); } catch (e) { console.error(e); }
+      try {
+        setRecentlyPlayed(JSON.parse(savedRecents));
+      } catch (e) {
+        console.error(e);
+        setRecentlyPlayed([]);
+      }
+    } else {
+      setRecentlyPlayed([]);
     }
-  }, []);
+  }, [recentKey]);
 
   const trackPlayed = useCallback((trackObj) => {
     setRecentlyPlayed((prev) => {
       const filtered = prev.filter((t) => t.name !== trackObj.name);
       const updated = [trackObj, ...filtered].slice(0, 8);
-      localStorage.setItem('vibecast_recently_played', JSON.stringify(updated));
+      localStorage.setItem(recentKey, JSON.stringify(updated));
       return updated;
     });
-  }, []);
+  }, [recentKey]);
 
   const getGreetingData = () => {
     const hour = new Date().getHours();
