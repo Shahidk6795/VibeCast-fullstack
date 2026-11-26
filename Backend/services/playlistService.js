@@ -11,7 +11,17 @@ export const createPlaylist = async (email, name) => {
 };
 
 export const getPlaylistsByUser = async (email) => {
-  const [rows] = await pool.query('SELECT * FROM playlists WHERE user_email = ? ORDER BY created_at DESC', [email]);
+  const [rows] = await pool.query(
+    `SELECT
+      p.*,
+      COUNT(pt.id) AS track_count
+     FROM playlists p
+     LEFT JOIN playlist_tracks pt ON pt.playlist_id = p.id
+     WHERE p.user_email = ?
+     GROUP BY p.id
+     ORDER BY p.created_at DESC`,
+    [email]
+  );
   return rows;
 };
 
@@ -26,11 +36,12 @@ export const updatePlaylistCover = async (id, coverUrl) => {
 export const deletePlaylist = async (id) => {
   await pool.query('DELETE FROM playlists WHERE id = ?', [id]);
 };
+
 // --- PLAYLIST TRACKS & SONGS LOGIC ---
 
 export const checkTrackInPlaylist = async (playlistId, audioUrl) => {
   const [existing] = await pool.query(
-    'SELECT id FROM playlist_tracks WHERE playlist_id = ? AND audio_url = ?', 
+    'SELECT id FROM playlist_tracks WHERE playlist_id = ? AND audio_url = ?',
     [playlistId, audioUrl]
   );
   return existing;
@@ -45,7 +56,7 @@ export const addTrackToPlaylist = async (playlistId, title, artist, audio_url, c
 
 export const getPlaylistTracks = async (playlistId) => {
   const [rows] = await pool.query(
-    'SELECT * FROM playlist_tracks WHERE playlist_id = ? ORDER BY added_at ASC', 
+    'SELECT * FROM playlist_tracks WHERE playlist_id = ? ORDER BY added_at ASC',
     [playlistId]
   );
   return rows;
@@ -53,7 +64,7 @@ export const getPlaylistTracks = async (playlistId) => {
 
 export const removeTrackFromPlaylist = async (playlistId, trackId) => {
   await pool.query(
-    'DELETE FROM playlist_tracks WHERE playlist_id = ? AND id = ?', 
+    'DELETE FROM playlist_tracks WHERE playlist_id = ? AND id = ?',
     [playlistId, trackId]
   );
 };
