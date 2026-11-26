@@ -1,8 +1,8 @@
 import React, { useState, useEffect, useContext, useRef, useCallback, useMemo } from 'react';
 import { useParams, useLocation, useNavigate } from 'react-router-dom';
 import { PlayerContext } from "../context/PlayerContext";
-import { useUser } from "@clerk/clerk-react";
-import { ArrowLeft, Clock, Music, Trash2, Camera, Pencil } from "lucide-react"; 
+import { AuthContext } from "../context/AuthContext";
+import { ArrowLeft, Clock, Music, Trash2, Camera, Pencil } from "lucide-react";
 import { API_URL } from '../config.js';
 
 const formatTime = (sec) => {
@@ -16,28 +16,37 @@ const CustomPlaylistPage = () => {
   const { id } = useParams();
   const location = useLocation();
   const navigate = useNavigate();
-  const { user } = useUser();
-  
-  const { 
-    playPlaylist, 
-    playPause, 
-    isPlaying, 
+  const { user, token } = useContext(AuthContext) || {};
+
+  const {
+    playPlaylist,
+    playPause,
+    isPlaying,
     playlist,
-    currentSongIndex, 
+    currentSongIndex,
     duration,
-    isShuffle, 
+    isShuffle,
     toggleShuffle,
-    setMiniPlayerVisible 
+    setMiniPlayerVisible
   } = useContext(PlayerContext);
-  
+
   const [songs, setSongs] = useState([]);
   const [playlistCover, setPlaylistCover] = useState(null);
   const [isUploading, setIsUploading] = useState(false);
   const fileInputRef = useRef(null);
 
-  const [localPlaylistName, setLocalPlaylistName] = useState(location.state?.name || "Custom Playlist");
+  const [localPlaylistName, setLocalPlaylistName] = useState(
+    location.state?.playlist?.name || location.state?.name || "Custom Playlist"
+  );
   const [isEditingName, setIsEditingName] = useState(false);
   const [editNameValue, setEditNameValue] = useState(localPlaylistName);
+
+  const firstName = user?.name ? user.name.trim().split(/\s+/)[0] : "User";
+
+  const authHeaders = useCallback((isJson = false) => ({
+    ...(isJson ? { 'Content-Type': 'application/json' } : {}),
+    ...(token ? { Authorization: `Bearer ${token}` } : {})
+  }), [token]);
 
   useEffect(() => {
     window.scrollTo(0, 0);
@@ -45,7 +54,9 @@ const CustomPlaylistPage = () => {
 
   const fetchPlaylistSongs = useCallback(async () => {
     try {
-      const res = await fetch(`${API_URL}/api/playlists/${id}/songs`);
+      const res = await fetch(`${API_URL}/api/playlists/${id}/songs`, {
+        headers: authHeaders()
+      });
       if (res.ok) {
         const data = await res.json();
         setSongs(data);
@@ -53,11 +64,13 @@ const CustomPlaylistPage = () => {
     } catch (e) {
       console.error("Failed to fetch custom playlist songs", e);
     }
-  }, [id]);
+  }, [id, authHeaders]);
 
   const fetchPlaylistDetails = useCallback(async () => {
     try {
-      const res = await fetch(`${API_URL}/api/playlists/details/${id}`);
+      const res = await fetch(`${API_URL}/api/playlists/details/${id}`, {
+        headers: authHeaders()
+      });
       if (res.ok) {
         const data = await res.json();
         if (data.cover_url) setPlaylistCover(data.cover_url);
@@ -69,7 +82,7 @@ const CustomPlaylistPage = () => {
     } catch (e) {
       console.error("Failed to fetch playlist details", e);
     }
-  }, [id]);
+  }, [id, authHeaders]);
 
   useEffect(() => {
     fetchPlaylistSongs();
@@ -87,9 +100,9 @@ const CustomPlaylistPage = () => {
     try {
       const res = await fetch(`${API_URL}/api/playlists/${id}/cover`, {
         method: 'POST',
+        headers: authHeaders(),
         body: formData,
       });
-      console.log("Upload response:", res);
       if (res.ok) {
         const data = await res.json();
         setPlaylistCover(data.cover_url);
@@ -103,7 +116,7 @@ const CustomPlaylistPage = () => {
 
   const handleSaveName = async () => {
     const trimmedName = editNameValue.trim();
-    
+
     if (!trimmedName || trimmedName === localPlaylistName) {
       setIsEditingName(false);
       setEditNameValue(localPlaylistName);
@@ -113,10 +126,10 @@ const CustomPlaylistPage = () => {
     try {
       const res = await fetch(`${API_URL}/api/playlists/${id}/name`, {
         method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
+        headers: authHeaders(true),
         body: JSON.stringify({ name: trimmedName })
       });
-      
+
       if (res.ok) {
         setLocalPlaylistName(trimmedName);
         setIsEditingName(false);
@@ -134,25 +147,24 @@ const CustomPlaylistPage = () => {
       path: song.audio_url || song.path,
       image: song.cover_url || song.image,
       id: song.id,
-      duration: song.duration || "--:--" 
+      duration: song.duration || "--:--"
     }));
   }, [songs]);
 
   const handlePlayPause = useCallback(() => {
     if (!formattedSongs.length) return;
-    
+
     if (!playlist || playlist.length === 0 || playlist[0].name !== formattedSongs[0]?.name) {
       playPlaylist(formattedSongs, 0);
     } else {
       playPause();
     }
-    
+
     if (setMiniPlayerVisible) setMiniPlayerVisible(true);
   }, [formattedSongs, playlist, playPlaylist, playPause, setMiniPlayerVisible]);
 
-  // FIX 1: Bulletproof Spacebar Listener
   const playPauseRef = useRef(handlePlayPause);
-  
+
   useEffect(() => {
     playPauseRef.current = handlePlayPause;
   }, [handlePlayPause]);
@@ -160,7 +172,7 @@ const CustomPlaylistPage = () => {
   useEffect(() => {
     const handleKeyDown = (event) => {
       if (event.target.tagName === "INPUT" || event.target.tagName === "TEXTAREA") return;
-      
+
       if (event.code === "Space" || event.key === " ") {
         if (event.repeat) return;
         event.preventDefault();
@@ -178,14 +190,15 @@ const CustomPlaylistPage = () => {
   }, [playPlaylist, formattedSongs, setMiniPlayerVisible]);
 
   const removeSong = async (e, songId) => {
-    e.stopPropagation(); 
+    e.stopPropagation();
     try {
       const response = await fetch(`${API_URL}/api/playlists/songs/${songId}`, {
         method: 'DELETE',
+        headers: authHeaders()
       });
 
       if (response.ok) {
-        setSongs(songs.filter(song => song.id !== songId));
+        setSongs(prev => prev.filter(song => song.id !== songId));
       }
     } catch (error) {
       console.error("Error removing song:", error);
@@ -194,33 +207,33 @@ const CustomPlaylistPage = () => {
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-[#121212] via-black to-black text-white pb-32 cursor-default select-none">
-      
+
       <div className="relative pt-24 pb-8 px-6 md:px-10 bg-gradient-to-b from-indigo-900 to-[#121212] flex items-end gap-6 shadow-lg">
-        <button 
-          onClick={() => navigate(-1)} 
+        <button
+          onClick={() => navigate(-1)}
           className="absolute top-24 left-6 md:left-10 p-2 bg-black/40 hover:bg-black/60 rounded-full backdrop-blur-md transition-transform hover:scale-110 cursor-pointer"
         >
           <ArrowLeft className="w-6 h-6 text-white" />
         </button>
 
-        <input 
-          type="file" 
-          accept="image/*" 
-          ref={fileInputRef} 
-          onChange={handleCoverUpload} 
-          className="hidden" 
+        <input
+          type="file"
+          accept="image/*"
+          ref={fileInputRef}
+          onChange={handleCoverUpload}
+          className="hidden"
         />
 
-        <div 
+        <div
           onClick={() => fileInputRef.current.click()}
           className="group relative w-40 h-40 md:w-52 md:h-52 flex-shrink-0 bg-[#282828] shadow-[0_20px_50px_rgba(0,0,0,0.5)] flex items-center justify-center mt-12 rounded-sm border-4 border-white/10 overflow-hidden cursor-pointer"
         >
           {playlistCover ? (
-             <img src={playlistCover} alt="Cover" className="w-full h-full object-cover group-hover:brightness-50 transition-all" />
+            <img src={playlistCover} alt="Cover" className="w-full h-full object-cover group-hover:brightness-50 transition-all" />
           ) : songs.length > 0 ? (
-             <img src={songs[0].cover_url} alt="Cover" className="w-full h-full object-cover group-hover:brightness-50 transition-all" />
+            <img src={songs[0].cover_url} alt="Cover" className="w-full h-full object-cover group-hover:brightness-50 transition-all" />
           ) : (
-             <Music className="w-20 h-20 text-white/30 group-hover:opacity-50 transition-all" />
+            <Music className="w-20 h-20 text-white/30 group-hover:opacity-50 transition-all" />
           )}
 
           <div className="absolute inset-0 flex flex-col items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity bg-black/40">
@@ -237,9 +250,9 @@ const CustomPlaylistPage = () => {
 
         <div className="flex flex-col gap-2 z-10 w-full overflow-hidden">
           <p className="text-sm font-bold uppercase tracking-widest text-white/80">Playlist</p>
-          
+
           {isEditingName ? (
-            <input 
+            <input
               type="text"
               value={editNameValue}
               onChange={(e) => setEditNameValue(e.target.value)}
@@ -249,7 +262,7 @@ const CustomPlaylistPage = () => {
               className="text-5xl md:text-7xl font-black text-white bg-black/30 border-b-2 border-[#1db954] outline-none rounded px-2 py-1 w-full max-w-2xl transition-all"
             />
           ) : (
-            <div 
+            <div
               className="group/title flex items-center gap-3 cursor-pointer w-max"
               onClick={() => setIsEditingName(true)}
               title="Click to edit name"
@@ -265,7 +278,7 @@ const CustomPlaylistPage = () => {
 
           <div className="flex items-center gap-2 text-sm text-gray-300 font-medium mt-2">
             {user?.imageUrl && <img src={user.imageUrl} alt="User" className="w-6 h-6 rounded-full border border-black" />}
-            <span className="text-white font-bold">{user?.firstName || "User"}</span>
+            <span className="text-white font-bold">{firstName}</span>
             <span>•</span>
             <span>{songs.length} {songs.length === 1 ? 'song' : 'songs'}</span>
           </div>
@@ -273,10 +286,10 @@ const CustomPlaylistPage = () => {
       </div>
 
       <div className="px-6 md:px-10 mt-6 max-w-5xl mx-auto">
-        
+
         <div className="flex items-center mb-6">
-          <button 
-            onClick={handlePlayPause} 
+          <button
+            onClick={handlePlayPause}
             className="w-16 h-16 rounded-full bg-[#1db954] text-black flex items-center justify-center shadow-lg hover:scale-105 transition-all duration-300 cursor-pointer"
           >
             {isPlaying && playlist && playlist.length > 0 && playlist[0].name === formattedSongs[0]?.name ? (
@@ -285,9 +298,9 @@ const CustomPlaylistPage = () => {
               <svg className="w-8 h-8 pl-0.5" fill="currentColor" viewBox="0 0 24 24"><path d="M8 5v14l11-7z" /></svg>
             )}
           </button>
-          
-          <button 
-            onClick={toggleShuffle} 
+
+          <button
+            onClick={toggleShuffle}
             className={`ml-4 font-semibold hover:text-white transition cursor-pointer tracking-widest ${isShuffle ? "text-[#1db954]" : "text-gray-400"}`}
           >
             SHUFFLE
@@ -307,19 +320,17 @@ const CustomPlaylistPage = () => {
             const isCurrentSong = playlist && playlist.length > 0 && playlist[currentSongIndex]?.name === song.name;
 
             return (
-              <div 
-                key={song.id} 
+              <div
+                key={song.id}
                 onClick={() => handlePlaySingle(index)}
                 className={`group grid grid-cols-[16px_48px_1fr_60px_40px] items-center gap-4 px-2 py-2 rounded-md cursor-default transition duration-200 hover:bg-white/10 ${isCurrentSong ? 'bg-white/5 text-white' : 'text-gray-400'}`}
               >
-                
-                {/* FIX 2: Animated Equalizer GIF injected here! */}
                 <div className="text-center font-medium text-sm flex justify-center items-center">
                   {isCurrentSong && isPlaying ? (
-                    <img 
-                      src="https://ik.imagekit.io/vibecast/images/equaliser-animated-green.f93a2ef4.gif" 
-                      alt="Playing" 
-                      className="w-4 h-4 mx-auto" 
+                    <img
+                      src="https://ik.imagekit.io/vibecast/images/equaliser-animated-green.f93a2ef4.gif"
+                      alt="Playing"
+                      className="w-4 h-4 mx-auto"
                     />
                   ) : (
                     <span className="group-hover:hidden">{index + 1}</span>
@@ -330,7 +341,7 @@ const CustomPlaylistPage = () => {
                 </div>
 
                 <img src={song.image} alt={song.name} className="w-12 h-12 object-cover rounded shadow-md pointer-events-none" />
-                
+
                 <div className="flex flex-col truncate">
                   <span className={`text-base font-semibold truncate ${isCurrentSong ? 'text-[#1db954]' : 'text-white'}`}>
                     {song.name}
@@ -348,8 +359,8 @@ const CustomPlaylistPage = () => {
                 </div>
 
                 <div className="text-center">
-                  <button 
-                    onClick={(e) => removeSong(e, song.id)} 
+                  <button
+                    onClick={(e) => removeSong(e, song.id)}
                     className="text-gray-400 hover:text-red-500 hover:scale-110 opacity-0 group-hover:opacity-100 transition-all cursor-pointer p-2 flex items-center justify-center w-full"
                     title="Remove from playlist"
                   >
