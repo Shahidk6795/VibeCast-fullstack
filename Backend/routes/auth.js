@@ -1,10 +1,12 @@
 import express from "express";
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
+import { OAuth2Client } from "google-auth-library";
 import { requireAuth } from "../middleware/auth.js";
 
 const router = express.Router();
 const JWT_SECRET = process.env.JWT_SECRET;
+const googleClient = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
 
 export default function createAuthRouter(pool) {
   const signToken = (user) =>
@@ -63,6 +65,10 @@ export default function createAuthRouter(pool) {
       }
 
       const dbUser = rows[0];
+      if (!dbUser.password_hash) {
+        return res.status(401).json({ error: "Please continue with Google for this account" });
+      }
+
       const match = await bcrypt.compare(password, dbUser.password_hash);
       if (!match) {
         return res.status(401).json({ error: "Invalid email or password" });
@@ -75,6 +81,50 @@ export default function createAuthRouter(pool) {
     } catch (err) {
       console.error("Login error:", err);
       return res.status(500).json({ error: "Login failed" });
+    }
+  });
+
+  router.post("/google", async (req, res) => {
+    try {
+      const credential = String(req.body.credential || "");
+      if (!credential) {
+        return res.status(400).json({ error: "Google credential is required" });
+      }
+
+      const ticket = await googleClient.verifyIdToken({
+        idToken: credential,
+        audience: process.env.GOOGLE_CLIENT_ID,
+      });
+
+      const payload = ticket.getPayload();
+      const email = String(payload?.email || "").trim().toLowerCase();
+      const name = String(payload?.name || email.split("@")[0] || "Music Lover").trim();
+
+      if (!email || payload?.email_verified === false) {
+        return res.status(400).json({ error: "Verified Google email required" });
+      }
+
+      const [existing] = await pool.query(
+        "SELECT id, name, email, role FROM users WHERE email = ?",
+        [email]
+      );
+
+      let user;
+      if (existing.length > 0) {
+        user = existing[0];
+      } else {
+        const [result] = await pool.query(
+          "INSERT INTO users (name, email, password_hash, role) VALUES (?, ?, NULL, 'user')",
+          [name, email]
+        );
+        user = { id: result.insertId, name, email, role: "user" };
+      }
+
+      const token = signToken(user);
+      return res.json({ token, user });
+    } catch (err) {
+      console.error("Google auth error:", err);
+      return res.status(401).json({ error: "Invalid Google token" });
     }
   });
 
