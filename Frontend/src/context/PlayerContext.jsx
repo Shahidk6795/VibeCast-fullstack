@@ -1,6 +1,7 @@
 /* eslint-disable no-empty */
 /* eslint-disable react-refresh/only-export-components */
-import React, { createContext, useState, useRef, useEffect, useCallback, useMemo } from "react";
+import React, { createContext, useContext, useState, useRef, useEffect, useCallback, useMemo } from "react";
+import { AuthContext } from "./AuthContext";
 
 export const PlayerContext = createContext();
 
@@ -34,6 +35,11 @@ const generateShuffleQueue = (length) => {
 };
 
 export const PlayerProvider = ({ children }) => {
+  const { user } = useContext(AuthContext) || {};
+  const historyKey = user?.email
+    ? `vibecast_history_${user.email.toLowerCase()}`
+    : "vibecast_history_guest";
+
   const [playlist, setPlaylist] = useState(() => {
     const saved = readStorageJSON("vibe_playlist", []);
     return Array.isArray(saved) ? saved : [];
@@ -85,14 +91,14 @@ export const PlayerProvider = ({ children }) => {
       if (!currentAudioUrl) return;
 
       try {
-        let history = readStorageJSON("vibecast_history", []);
+        let history = readStorageJSON(historyKey, []);
         if (!Array.isArray(history)) history = [];
         const historyUrl = history[0]?.audio_url || history[0]?.path;
 
         if (history.length === 0 || historyUrl !== currentAudioUrl) {
           history.unshift(song);
           history = history.slice(0, 15);
-          localStorage.setItem("vibecast_history", JSON.stringify(history));
+          localStorage.setItem(historyKey, JSON.stringify(history));
         }
       } catch (err) {
         console.error("Could not save to history", err);
@@ -122,7 +128,7 @@ export const PlayerProvider = ({ children }) => {
         }
       }
     }
-  }, [playlist, currentSongIndex, isPlaying]);
+  }, [playlist, currentSongIndex, isPlaying, historyKey]);
 
   useEffect(() => {
     const audio = audioRef.current;

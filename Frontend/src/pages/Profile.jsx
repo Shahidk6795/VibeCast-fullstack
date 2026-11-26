@@ -19,10 +19,13 @@ const Profile = () => {
   const email = user?.email || "";
 
   useEffect(() => {
-    if (!email) return;
+    if (!email) {
+      setRecentSongs([]);
+      return;
+    }
 
     try {
-      const saved = JSON.parse(localStorage.getItem('vibecast_history'));
+      const saved = JSON.parse(localStorage.getItem(`vibecast_history_${email.toLowerCase()}`));
       setRecentSongs(Array.isArray(saved) ? saved : []);
     } catch {
       setRecentSongs([]);
