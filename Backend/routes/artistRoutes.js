@@ -3,20 +3,13 @@ import * as artistController from '../controllers/artistController.js';
 
 const router = express.Router();
 
-router.post('/', artistController.addArtist);
 router.get('/', artistController.fetchAllArtists);
-router.get('/catalog', artistController.fetchArtistCatalog); 
-router.get('/albums', artistController.fetchArtistAlbums); 
-router.get('/search', artistController.searchLiveArtists); 
-router.get('/default', artistController.fetchDefaultArtists); 
-
-// NEW: The Homepage Feeds Route
-router.get('/modules', artistController.fetchHomeModules); 
-
-// Add this line right below your other router.get() lines:
+router.get('/catalog', artistController.fetchArtistCatalog);
+router.get('/albums', artistController.fetchArtistAlbums);
+router.get('/search', artistController.searchLiveArtists);
+router.get('/default', artistController.fetchDefaultArtists);
+router.get('/modules', artistController.fetchHomeModules);
 router.get('/playlists', artistController.fetchPlaylistDetails);
-
 router.get('/name/:artistName', artistController.fetchArtistByName);
-router.delete('/:id', artistController.deleteArtist);
 
 export default router;
