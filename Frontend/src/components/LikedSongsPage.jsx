@@ -1,270 +1,225 @@
-import React, { useState, useEffect, useContext, useCallback, useMemo, useRef } from 'react';
-import { useUser } from "@clerk/clerk-react";
-import { useNavigate } from "react-router-dom";
+import React, { useState, useEffect, useContext, useCallback } from 'react';
+import { AuthContext } from "../context/AuthContext";
 import { PlayerContext } from "../context/PlayerContext";
-import { Heart, ArrowLeft, Clock, MoreVertical } from "lucide-react"; 
-import AddToPlaylistModal from "@/components/AddToPlaylistModal"; 
+import { Heart, Play, Trash2, ArrowLeft } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 import { API_URL } from "../config.js";
 
-const formatTime = (sec) => {
-  if (!sec) return "0:00";
-  const minutes = Math.floor(sec / 60);
-  const seconds = Math.floor(sec % 60).toString().padStart(2, "0");
-  return `${minutes}:${seconds}`;
-};
-
 const LikedSongsPage = () => {
-  const { user } = useUser();
+  const { user, token, isLoaded, openAuthModal } = useContext(AuthContext) || {};
+  const { playPlaylist, isPlaying, currentSongIndex, playlist, playPause } = useContext(PlayerContext) || {};
   const navigate = useNavigate();
-  
-  const { 
-    playPlaylist, 
-    playPause, 
-    isPlaying, 
-    playlist,
-    currentSongIndex, 
-    duration,
-    isShuffle, 
-    toggleShuffle,
-    setMiniPlayerVisible 
-  } = useContext(PlayerContext);
-  
-  const [likedSongs, setLikedSongs] = useState([]);
-  
-  const [isModalOpen, setIsModalOpen] = useState(false);
-  const [selectedSong, setSelectedSong] = useState(null);
-  
-  const email = user?.primaryEmailAddress?.emailAddress;
 
-  useEffect(() => {
-    window.scrollTo(0, 0);
-  }, []);
+  const [likedSongs, setLikedSongs] = useState([]);
+  const [isLoading, setIsLoading] = useState(true);
+
+  const email = user?.email || "";
 
   const fetchLikedSongs = useCallback(async () => {
-    if (!email) return;
+    if (!email || !token) return;
+    setIsLoading(true);
     try {
-      const res = await fetch(`${API_URL}/api/likes/${email}`);
+      const res = await fetch(`${API_URL}/api/likes/${encodeURIComponent(email)}`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
       if (res.ok) {
         const data = await res.json();
-        setLikedSongs(data);
+        setLikedSongs(Array.isArray(data) ? data : []);
       }
-    } catch (e) {
-      console.error("Failed to fetch liked songs", e);
+    } catch (error) {
+      console.error("Error loading liked songs:", error);
+    } finally {
+      setIsLoading(false);
     }
-  }, [email]);
+  }, [email, token]);
 
   useEffect(() => {
-    fetchLikedSongs();
-    window.addEventListener('vibecast_likes_updated', fetchLikedSongs);
-    return () => window.removeEventListener('vibecast_likes_updated', fetchLikedSongs);
-  }, [email, fetchLikedSongs]);
-
-  const formattedSongs = useMemo(() => {
-    return likedSongs.map(song => ({
-      name: song.name || song.title,
-      artist: song.artist,
-      path: song.path || song.audio_url,
-      image: song.image || song.cover_url,
-      id: song.track_id || song.id,
-      duration: song.duration || "--:--" 
-    }));
-  }, [likedSongs]);
-
-  const handlePlayPause = useCallback(() => {
-    if (!formattedSongs.length) return;
-    
-    if (!playlist.length || playlist[0].name !== formattedSongs[0]?.name) {
-      playPlaylist(formattedSongs, 0);
-    } else {
-      playPause();
-    }
-    
-    if (setMiniPlayerVisible) setMiniPlayerVisible(true);
-  }, [formattedSongs, playlist, playPlaylist, playPause, setMiniPlayerVisible]);
-
-  // FIX: Bulletproof Spacebar Listener (prevents double-trigger with mini-player)
-  const playPauseRef = useRef(handlePlayPause);
-  
-  useEffect(() => {
-    playPauseRef.current = handlePlayPause;
-  }, [handlePlayPause]);
-
-  useEffect(() => {
-    const handleKeyDown = (event) => {
-      if (event.target.tagName === "INPUT" || event.target.tagName === "TEXTAREA") return;
-      
-      if (event.code === "Space" || event.key === " ") {
-        if (event.repeat) return;
-        event.preventDefault();
-        event.stopImmediatePropagation();
-        if (playPauseRef.current) playPauseRef.current();
+    if (isLoaded) {
+      if (email && token) {
+        fetchLikedSongs();
+      } else {
+        setIsLoading(false);
       }
+    }
+  }, [isLoaded, email, token, fetchLikedSongs]);
+
+  useEffect(() => {
+    const handleUpdate = () => {
+      if (email && token) fetchLikedSongs();
     };
-    window.addEventListener("keydown", handleKeyDown, { capture: true });
-    return () => window.removeEventListener("keydown", handleKeyDown, { capture: true });
-  }, []);
+    window.addEventListener('vibecast_likes_updated', handleUpdate);
+    return () => window.removeEventListener('vibecast_likes_updated', handleUpdate);
+  }, [email, token, fetchLikedSongs]);
 
-  const handlePlaySingle = (index) => {
-    playPlaylist(formattedSongs, index, true);
-    if (setMiniPlayerVisible) setMiniPlayerVisible(true);
-  };
+  const handleUnlike = async (e, song) => {
+    e.stopPropagation();
+    if (!email || !token) return;
 
-  const removeLike = async (e, song) => {
-    e.stopPropagation(); 
+    const audioUrl = song.path || song.audio_url;
+
     try {
-      const response = await fetch(`${API_URL}/api/likes`, {
+      const res = await fetch(`${API_URL}/api/likes`, {
         method: 'DELETE',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: email, audio_url: song.path || song.audio_url }),
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          email,
+          audio_url: audioUrl
+        })
       });
 
-      if (response.ok) {
-        fetchLikedSongs();
+      if (res.ok) {
+        setLikedSongs(prev => prev.filter(s => (s.path || s.audio_url) !== audioUrl));
         window.dispatchEvent(new Event('vibecast_likes_updated'));
       }
     } catch (error) {
-      console.error("Error removing like:", error);
+      console.error("Failed to unlike song:", error);
     }
   };
 
-  return (
-    <div className="min-h-screen bg-gradient-to-b from-[#121212] via-black to-black text-white pb-32 cursor-default select-none">
-      
-      <div className="relative pt-24 pb-8 px-6 md:px-10 bg-gradient-to-b from-indigo-900 to-[#121212] flex items-end gap-6 shadow-lg">
-        <button 
-          onClick={() => navigate(-1)} 
-          className="absolute top-24 left-6 md:left-10 p-2 bg-black/40 hover:bg-black/60 rounded-full backdrop-blur-md transition-transform hover:scale-110 cursor-pointer"
+  const formattedTracks = likedSongs.map(s => ({
+    name: s.name || s.title,
+    artist: s.artist,
+    path: s.path || s.audio_url,
+    image: s.image || s.cover_url || "https://placehold.co/400x400/181818/ffffff?text=Track",
+    duration: s.duration
+  }));
+
+  const currentPlayingSong = playlist?.[currentSongIndex];
+  const isCurrentPlaylistPlaying = isPlaying && formattedTracks.some(t => t.path === currentPlayingSong?.path);
+
+  const handlePlayAll = () => {
+    if (formattedTracks.length === 0) return;
+    if (isCurrentPlaylistPlaying) {
+      playPause();
+    } else {
+      playPlaylist(formattedTracks, 0);
+    }
+  };
+
+  if (!isLoaded || isLoading) {
+    return (
+      <div className="min-h-screen bg-black flex items-center justify-center">
+        <div className="w-10 h-10 border-4 border-[#1db954] border-t-transparent rounded-full animate-spin"></div>
+      </div>
+    );
+  }
+
+  if (!email || !token) {
+    return (
+      <div className="min-h-screen bg-black text-white flex flex-col items-center justify-center gap-4 p-6 text-center">
+        <Heart className="w-14 h-14 text-[#1db954]" />
+        <h2 className="text-2xl font-bold">Sign in to view Liked Songs</h2>
+        <p className="text-gray-400 text-sm max-w-md">
+          Your saved tracks are linked to your VibeCast account.
+        </p>
+        <button
+          type="button"
+          onClick={() => openAuthModal?.()}
+          className="px-6 py-3 rounded-full bg-[#1db954] hover:bg-[#1ed760] text-black font-bold text-sm transition"
         >
-          <ArrowLeft className="w-6 h-6 text-white" />
+          Sign In
+        </button>
+      </div>
+    );
+  }
+
+  return (
+    <div className="min-h-screen bg-black text-white p-6 md:p-10 pt-24 pb-32">
+      <div className="max-w-5xl mx-auto">
+        <button
+          type="button"
+          onClick={() => navigate(-1)}
+          className="flex items-center gap-2 text-gray-400 hover:text-white mb-6 transition text-sm font-medium"
+        >
+          <ArrowLeft className="w-4 h-4" /> Back
         </button>
 
-        <div className="w-40 h-40 md:w-52 md:h-52 bg-gradient-to-br from-indigo-500 to-purple-600 shadow-[0_20px_50px_rgba(0,0,0,0.5)] flex items-center justify-center mt-12 rounded-sm border-4 border-white/10 pointer-events-none">
-          <Heart className="w-20 h-20 text-white" fill="white" />
-        </div>
-
-        <div className="flex flex-col gap-2 z-10">
-          <p className="text-sm font-bold uppercase tracking-widest text-white/80">Playlist</p>
-          <h1 className="text-5xl md:text-7xl font-black text-white tracking-tighter drop-shadow-lg">Liked Songs</h1>
-          <div className="flex items-center gap-2 text-sm text-gray-300 font-medium mt-2">
-            <img src={user?.imageUrl} alt="User" className="w-6 h-6 rounded-full border border-black" />
-            <span className="text-white font-bold">{user?.firstName}</span>
-            <span>•</span>
-            <span>{likedSongs.length} songs</span>
+        <div className="flex flex-col sm:flex-row items-center sm:items-end gap-6 mb-8 bg-gradient-to-r from-indigo-900/40 via-purple-900/30 to-transparent p-6 sm:p-8 rounded-3xl border border-white/10">
+          <div className="w-36 h-36 sm:w-44 sm:h-44 rounded-2xl bg-gradient-to-tr from-[#1db954] to-emerald-300 flex items-center justify-center shadow-2xl flex-shrink-0">
+            <Heart className="w-16 h-16 sm:w-20 sm:h-20 text-black fill-black" />
           </div>
-        </div>
-      </div>
 
-      <div className="px-6 md:px-10 mt-6 max-w-5xl mx-auto">
-        
-        <div className="flex items-center mb-6">
-          <button 
-            onClick={handlePlayPause} 
-            className="w-16 h-16 rounded-full bg-[#1db954] text-black flex items-center justify-center shadow-lg hover:scale-105 transition-all duration-300 cursor-pointer"
-          >
-            {isPlaying && playlist.length && playlist[0].name === formattedSongs[0]?.name ? (
-              <svg className="w-8 h-8" fill="currentColor" viewBox="0 0 24 24"><path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z" /></svg>
-            ) : (
-              <svg className="w-8 h-8 pl-0.5" fill="currentColor" viewBox="0 0 24 24"><path d="M8 5v14l11-7z" /></svg>
-            )}
-          </button>
-          
-          <button 
-            onClick={toggleShuffle} 
-            className={`ml-4 font-semibold hover:text-white transition cursor-pointer tracking-widest ${isShuffle ? "text-[#1db954]" : "text-gray-400"}`}
-          >
-            SHUFFLE
-          </button>
-        </div>
+          <div className="text-center sm:text-left flex-1">
+            <span className="text-xs font-bold uppercase tracking-widest text-[#1db954]">Playlist</span>
+            <h1 className="text-4xl sm:text-6xl font-black mt-1 mb-2 tracking-tight">Liked Songs</h1>
+            <p className="text-sm text-gray-300 font-medium">
+              {user?.name || "Music Lover"} • {likedSongs.length} {likedSongs.length === 1 ? "song" : "songs"}
+            </p>
+          </div>
 
-        <div className="grid grid-cols-[16px_48px_1fr_60px_80px] gap-4 py-2 px-2 border-b border-gray-700/50 text-gray-400 text-xs uppercase font-semibold mb-2 pointer-events-none">
-          <div className="text-center">#</div>
-          <div></div>
-          <div>Title</div>
-          <div className="text-right"><Clock className="w-4 h-4 ml-auto" /></div>
-          <div></div>
-        </div>
-
-        <div className="flex flex-col">
-          {formattedSongs.map((song, index) => {
-            const isCurrentSong = playlist.length && playlist[currentSongIndex]?.name === song.name;
-
-            return (
-              <div 
-                key={index} 
-                onClick={() => handlePlaySingle(index)}
-                className={`group grid grid-cols-[16px_48px_1fr_60px_80px] items-center gap-4 px-2 py-2 rounded-md cursor-default transition duration-200 hover:bg-white/10 ${isCurrentSong ? 'bg-white/5 text-white' : 'text-gray-400'}`}
-              >
-                {/* FIX: Animated Equalizer GIF injected here */}
-                <div className="text-center font-medium text-sm flex justify-center items-center">
-                  {isCurrentSong && isPlaying ? (
-                    <img 
-                      src="https://ik.imagekit.io/vibecast/images/equaliser-animated-green.f93a2ef4.gif" 
-                      alt="Playing" 
-                      className="w-4 h-4 mx-auto" 
-                    />
-                  ) : (
-                    <span className="group-hover:hidden">{index + 1}</span>
-                  )}
-                  {!(isCurrentSong && isPlaying) && (
-                    <svg className="w-4 h-4 hidden group-hover:block text-white mx-auto" fill="currentColor" viewBox="0 0 24 24"><path d="M8 5v14l11-7z" /></svg>
-                  )}
-                </div>
-
-                <img src={song.image} alt={song.name} className="w-12 h-12 object-cover rounded shadow-md pointer-events-none" />
-                
-                <div className="flex flex-col truncate">
-                  <span className={`text-base font-semibold truncate ${isCurrentSong ? 'text-[#1db954]' : 'text-white'}`}>
-                    {song.name}
-                  </span>
-                  <span className="text-sm font-light text-gray-400 group-hover:text-gray-300 truncate">
-                    {song.artist}
-                  </span>
-                </div>
-
-                <div className="text-right text-sm text-gray-400">
-                  {isCurrentSong
-                    ? formatTime(duration)
-                    : song.duration
-                  }
-                </div>
-
-                <div className="flex justify-end items-center gap-1">
-                  <button 
-                    onClick={(e) => removeLike(e, song)} 
-                    className="text-[#1db954] hover:text-red-500 hover:scale-110 transition-all cursor-pointer p-2 flex items-center justify-center"
-                    title="Remove from Liked Songs"
-                  >
-                    <Heart className="w-5 h-5 fill-current" />
-                  </button>
-                  
-                  <button 
-                     onClick={(e) => {
-                        e.stopPropagation();
-                        setSelectedSong(song);
-                        setIsModalOpen(true);
-                     }}
-                     className="hidden group-hover:block cursor-pointer text-gray-400 hover:text-white p-2 transition-all"
-                   >
-                     <MoreVertical className="w-5 h-5" />
-                   </button>
-                </div>
-              </div>
-            );
-          })}
-
-          {formattedSongs.length === 0 && (
-            <div className="text-center text-gray-500 mt-10 py-10">
-              No liked songs yet. Start exploring and hit the heart!
-            </div>
+          {likedSongs.length > 0 && (
+            <button
+              type="button"
+              onClick={handlePlayAll}
+              className="w-14 h-14 rounded-full bg-[#1db954] hover:bg-[#1ed760] text-black flex items-center justify-center shadow-lg hover:scale-105 transition transform flex-shrink-0"
+            >
+              {isCurrentPlaylistPlaying ? (
+                <svg className="w-6 h-6 fill-current" viewBox="0 0 24 24"><path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z" /></svg>
+              ) : (
+                <Play className="w-6 h-6 fill-current ml-0.5" />
+              )}
+            </button>
           )}
         </div>
-      </div>
 
-      <AddToPlaylistModal 
-        isOpen={isModalOpen}
-        onClose={() => setIsModalOpen(false)}
-        track={selectedSong}
-      />
+        {likedSongs.length === 0 ? (
+          <div className="text-center py-20 bg-[#121212] rounded-2xl border border-white/5">
+            <Heart className="w-12 h-12 text-gray-700 mx-auto mb-3" />
+            <h3 className="text-lg font-bold text-white mb-1">No liked songs yet</h3>
+            <p className="text-sm text-gray-400">Tap the heart icon on any playing track to save it here.</p>
+          </div>
+        ) : (
+          <div className="space-y-2">
+            {likedSongs.map((song, idx) => {
+              const songPath = song.path || song.audio_url;
+              const songName = song.name || song.title;
+              const songImage = song.image || song.cover_url || "https://placehold.co/400x400/181818/ffffff?text=Track";
+              const isCurrent = currentPlayingSong?.path === songPath;
+              return (
+                <div
+                  key={song.id || idx}
+                  onClick={() => playPlaylist(formattedTracks, idx)}
+                  className={`group flex items-center justify-between gap-4 p-3 rounded-xl cursor-pointer transition ${
+                    isCurrent ? "bg-white/15" : "bg-[#181818] hover:bg-[#242424]"
+                  }`}
+                >
+                  <div className="flex items-center gap-4 min-w-0 flex-1">
+                    <span className="w-6 text-center text-sm font-medium text-gray-400">
+                      {idx + 1}
+                    </span>
+                    <img
+                      src={songImage}
+                      alt={songName}
+                      className="w-12 h-12 rounded-lg object-cover flex-shrink-0"
+                    />
+                    <div className="min-w-0 flex-1">
+                      <h4 className={`font-semibold text-sm truncate ${isCurrent ? "text-[#1db954]" : "text-white"}`}>
+                        {songName}
+                      </h4>
+                      <p className="text-xs text-gray-400 truncate">{song.artist}</p>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-4">
+                    <span className="text-xs text-gray-400 hidden sm:block">{song.duration || "0:00"}</span>
+                    <button
+                      type="button"
+                      onClick={(e) => handleUnlike(e, song)}
+                      className="p-2 text-gray-400 hover:text-red-500 transition rounded-full hover:bg-white/5"
+                      title="Remove from Liked Songs"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
     </div>
   );
 };

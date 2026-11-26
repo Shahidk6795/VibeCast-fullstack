@@ -1,25 +1,22 @@
 import React, { useState, useEffect, useContext, useCallback } from 'react';
-import { useUser, useClerk, UserProfile } from "@clerk/clerk-react";
 import { useNavigate } from "react-router-dom";
 import { LogOut, ShieldAlert, Clock, Settings, Play, Music, Power } from "lucide-react";
 import { PlayerContext } from "../context/PlayerContext";
+import { AuthContext } from "../context/AuthContext";
 import { API_URL } from "../config.js";
 
 const Profile = () => {
-  const { user, isLoaded } = useUser();
-  const { signOut } = useClerk();
   const navigate = useNavigate();
   const { playPlaylist } = useContext(PlayerContext) || {};
+  const { user, token, isLoaded, isAdmin, logout } = useContext(AuthContext) || {};
 
   const [activeTab, setActiveTab] = useState("history");
   const [recentSongs, setRecentSongs] = useState([]);
-  
+
   const [maintenanceMode, setMaintenanceMode] = useState(false);
   const [isSwitching, setIsSwitching] = useState(false);
 
-  const email = user?.primaryEmailAddress?.emailAddress;
-  const adminEmail = (import.meta.env.VITE_ADMIN_EMAIL || "").trim().toLowerCase();
-  const isAdmin = Boolean(adminEmail && (email || "").trim().toLowerCase() === adminEmail);
+  const email = user?.email || "";
 
   useEffect(() => {
     if (!email) return;
@@ -56,7 +53,10 @@ const Profile = () => {
     try {
       const res = await fetch(`${API_URL}/api/settings/maintenance`, {
         method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {})
+        },
         body: JSON.stringify({ isEnabled: newState })
       });
       if (res.ok) {
@@ -88,10 +88,15 @@ const Profile = () => {
     }
   };
 
+  const handleSignOut = () => {
+    logout?.();
+    navigate('/');
+  };
+
   return (
     <div className="min-h-screen bg-black text-white p-6 md:p-10 pt-24 pb-32">
       <div className="max-w-6xl mx-auto space-y-10">
-        
+
         {/* Profile Header */}
         <div className="flex flex-col md:flex-row items-center justify-between gap-8 relative">
           <div className="absolute -top-20 -left-20 w-64 h-64 bg-pink-500/20 blur-[100px] rounded-full pointer-events-none"></div>
@@ -99,13 +104,13 @@ const Profile = () => {
 
           <div className="flex flex-col md:flex-row items-center gap-8 text-center md:text-left flex-1 z-10">
             <div className="relative w-36 h-36 md:w-48 md:h-48 rounded-full p-1 bg-gradient-to-tr from-pink-500 to-[#1db954] shadow-2xl flex-shrink-0">
-              <img 
-                src={user?.imageUrl || "https://placehold.co/400x400/181818/ffffff?text=User"} 
-                alt="Profile" 
-                className="w-full h-full object-cover rounded-full border-4 border-black" 
+              <img
+                src={user?.imageUrl || "https://placehold.co/400x400/181818/ffffff?text=User"}
+                alt="Profile"
+                className="w-full h-full object-cover rounded-full border-4 border-black"
               />
             </div>
-            
+
             <div className="flex-1">
               <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-white/5 border border-white/10 text-xs font-medium text-gray-300 mb-3 uppercase tracking-wider backdrop-blur-md">
                 {isAdmin ? (
@@ -115,7 +120,7 @@ const Profile = () => {
                 )}
               </div>
               <h1 className="text-5xl md:text-7xl font-black mb-2 tracking-tight text-white drop-shadow-md">
-                {user?.firstName || "Music Lover"} {user?.lastName || ""}
+                {user?.name || "Music Lover"}
               </h1>
               <p className="text-gray-400 font-medium text-lg">
                 {email}
@@ -125,8 +130,9 @@ const Profile = () => {
 
           {/* Quick Sign Out Button at Top */}
           <div className="z-10">
-            <button 
-              onClick={() => signOut({ redirectUrl: '/' })} 
+            <button
+              type="button"
+              onClick={handleSignOut}
               className="flex items-center gap-2 px-5 py-2.5 bg-[#181818] hover:bg-red-500/10 text-gray-300 hover:text-red-500 border border-white/10 hover:border-red-500/30 rounded-full transition-all duration-300 font-semibold text-sm"
             >
               <LogOut className="w-4 h-4" />
@@ -144,19 +150,21 @@ const Profile = () => {
               <p className="text-gray-400 text-sm mt-1">Manage global tracks and application status.</p>
             </div>
             <div className="flex flex-col sm:flex-row gap-4 w-full md:w-auto">
-              <button 
+              <button
+                type="button"
                 onClick={toggleMaintenance}
                 disabled={isSwitching}
                 className={`flex-1 sm:flex-none px-6 py-3 font-bold rounded-full transition-all flex items-center justify-center gap-2 ${
-                  maintenanceMode 
-                  ? 'bg-red-500/20 text-red-500 border border-red-500/50 hover:bg-red-500 hover:text-white' 
-                  : 'bg-black/50 text-gray-300 border border-white/10 hover:bg-white hover:text-black'
+                  maintenanceMode
+                    ? 'bg-red-500/20 text-red-500 border border-red-500/50 hover:bg-red-500 hover:text-white'
+                    : 'bg-black/50 text-gray-300 border border-white/10 hover:bg-white hover:text-black'
                 }`}
               >
                 <Power className="w-4 h-4" />
                 {maintenanceMode ? 'Maintenance: ON' : 'Maintenance: OFF'}
               </button>
-              <button 
+              <button
+                type="button"
                 onClick={() => navigate('/admin')}
                 className="flex-1 sm:flex-none px-6 py-3 bg-[#1db954] hover:bg-[#1ed760] text-black font-bold rounded-full transition-transform transform hover:scale-105 flex items-center justify-center"
               >
@@ -167,13 +175,15 @@ const Profile = () => {
         )}
 
         <div className="flex space-x-8 border-b border-white/10 overflow-x-auto scrollbar-hide">
-          <button 
+          <button
+            type="button"
             onClick={() => setActiveTab('history')}
             className={`pb-4 text-sm font-bold uppercase tracking-wider whitespace-nowrap transition-colors flex items-center gap-2 ${activeTab === 'history' ? 'text-white border-b-2 border-[#1db954]' : 'text-gray-500 hover:text-white'}`}
           >
             <Clock className="w-4 h-4" /> Recently Played
           </button>
-          <button 
+          <button
+            type="button"
             onClick={() => setActiveTab('settings')}
             className={`pb-4 text-sm font-bold uppercase tracking-wider whitespace-nowrap transition-colors flex items-center gap-2 ${activeTab === 'settings' ? 'text-white border-b-2 border-blue-500' : 'text-gray-500 hover:text-white'}`}
           >
@@ -212,19 +222,25 @@ const Profile = () => {
           )}
 
           {activeTab === 'settings' && (
-            <div className="animate-fade-in flex justify-center w-full">
-               <div className="w-full max-w-4xl bg-[#181818] rounded-2xl overflow-hidden p-2">
-                 <UserProfile 
-                   routing="hash"
-                   appearance={{
-                     elements: {
-                       rootBox: "w-full",
-                       cardBox: "w-full shadow-none bg-transparent rounded-none",
-                       navbar: "hidden md:flex",
-                     }
-                   }}
-                 />
-               </div>
+            <div className="animate-fade-in max-w-2xl bg-[#181818] border border-white/10 rounded-2xl p-6 sm:p-8 space-y-6">
+              <div>
+                <h3 className="text-xl font-bold text-white mb-1">Account Details</h3>
+                <p className="text-sm text-gray-400">Your VibeCast account information stored in MySQL.</p>
+              </div>
+              <div className="space-y-4 text-sm">
+                <div className="flex justify-between py-2.5 border-b border-white/10">
+                  <span className="text-gray-400">Name</span>
+                  <span className="font-semibold text-white">{user?.name || "—"}</span>
+                </div>
+                <div className="flex justify-between py-2.5 border-b border-white/10">
+                  <span className="text-gray-400">Email</span>
+                  <span className="font-semibold text-white">{email || "—"}</span>
+                </div>
+                <div className="flex justify-between py-2.5">
+                  <span className="text-gray-400">Role</span>
+                  <span className="font-semibold text-[#1db954] uppercase">{user?.role || "user"}</span>
+                </div>
+              </div>
             </div>
           )}
         </div>

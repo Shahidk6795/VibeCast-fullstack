@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useContext, useCallback, useMemo } from 'react';
 import { useNavigate } from "react-router-dom";
-import { useUser } from "@clerk/clerk-react";
+import { AuthContext } from "../context/AuthContext";
 import { PlayerContext } from "../context/PlayerContext";
 import "../index.css";
 import Hyperspeed from "@/components/Hyperspeed";
@@ -125,7 +125,8 @@ const Home = () => {
   const [topCharts, setTopCharts] = useState([]);
   const [newReleases, setNewReleases] = useState([]);
 
-  const { user } = useUser();
+  const { user } = useContext(AuthContext) || {};
+  const firstName = user?.name ? user.name.trim().split(/\s+/)[0] : "";
   const navigate = useNavigate();
   const { playPlaylist } = useContext(PlayerContext) || {};
 
@@ -321,7 +322,7 @@ const Home = () => {
           <div className="flex items-center gap-3 mb-6">
             <GreetingIcon className={`w-8 h-8 md:w-10 md:h-10 ${greeting.color} drop-shadow-md`} />
             <h1 className="text-3xl md:text-5xl font-black tracking-tight text-white drop-shadow-md">
-              {greeting.text}{user?.firstName ? `, ${user.firstName}` : ""}
+              {greeting.text}{firstName ? `, ${firstName}` : ""}
             </h1>
           </div>
 

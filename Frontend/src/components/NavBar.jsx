@@ -1,7 +1,7 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useContext } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { User, Home, Disc, Flame, Search, Upload, LayoutDashboard } from "lucide-react";
-import { useUser, useClerk } from "@clerk/clerk-react";
+import { AuthContext } from "../context/AuthContext";
 import logo from "../assets/logo.png";
 
 const Navbar = () => {
@@ -9,12 +9,7 @@ const Navbar = () => {
   const location = useLocation();
   const [scrolled, setScrolled] = useState(false);
 
-  const { user, isSignedIn } = useUser();
-  const { openSignIn } = useClerk();
-
-  const adminEmail = (import.meta.env.VITE_ADMIN_EMAIL || "").trim().toLowerCase();
-  const userEmail = (user?.primaryEmailAddress?.emailAddress || "").trim().toLowerCase();
-  const isAdmin = Boolean(isSignedIn && adminEmail && userEmail === adminEmail);
+  const { user, isSignedIn, isAdmin, openAuthModal } = useContext(AuthContext) || {};
 
   useEffect(() => {
     const handleScroll = () => {
@@ -86,11 +81,12 @@ const Navbar = () => {
 
           <div className="flex items-center gap-4 flex-1 justify-end md:flex-none">
             <button
+              type="button"
               onClick={() => {
                 if (isSignedIn) {
                   navigate("/profile");
                 } else {
-                  openSignIn();
+                  openAuthModal?.();
                 }
               }}
               className="relative group focus:outline-none"
@@ -98,7 +94,7 @@ const Navbar = () => {
             >
               <div className="absolute -inset-0.5 bg-gradient-to-tr from-pink-500 to-purple-600 rounded-full opacity-70 group-hover:opacity-100 blur transition duration-300"></div>
               <div className="relative w-9 h-9 bg-[#121212] rounded-full flex items-center justify-center border border-white/10 overflow-hidden">
-                {isSignedIn ? (
+                {isSignedIn && user?.imageUrl ? (
                   <img src={user.imageUrl} alt="Profile" className="w-full h-full object-cover" />
                 ) : (
                   <User className="w-5 h-5 text-gray-300 group-hover:text-white transition-colors" />

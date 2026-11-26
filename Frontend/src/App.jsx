@@ -1,6 +1,6 @@
-import React from 'react';
-import { BrowserRouter, Route, Routes } from "react-router-dom";
-import { ClerkProvider, SignedIn, SignedOut, RedirectToSignIn, useUser } from "@clerk/clerk-react";
+import React, { useContext, useEffect } from "react";
+import { BrowserRouter, Route, Routes, useNavigate } from "react-router-dom";
+import { GoogleOAuthProvider } from "@react-oauth/google";
 
 import Home from "./pages/Home";
 import Navbar from "./components/NavBar";
@@ -13,21 +13,53 @@ import NotFound from "./pages/NotFound";
 import ArtistPage from "./components/ArtistPage";
 import GlobalMiniPlayer from "./components/GlobalMiniPlayer";
 import { PlayerProvider } from "./context/PlayerContext";
-import Admin from './Admin';
+import { AuthProvider, AuthContext } from "./context/AuthContext";
+import AuthModal from "./components/AuthModal";
+import Admin from "./Admin";
 import Profile from "./pages/Profile";
 import LikedSongsPage from "./components/LikedSongsPage";
 import CustomPlaylistPage from "./pages/CustomPlaylistPage";
-import MaintenanceGuard from './components/MaintenanceGuard';
-import AlbumPage from './components/AlbumPage';
-import ErrorBoundary from './components/ErrorBoundary';
-import ServerWakeBanner from './components/ServerWakeBanner';
+import MaintenanceGuard from "./components/MaintenanceGuard";
+import AlbumPage from "./components/AlbumPage";
+import ErrorBoundary from "./components/ErrorBoundary";
+import ServerWakeBanner from "./components/ServerWakeBanner";
 
-const PUBLISHABLE_KEY = import.meta.env.VITE_CLERK_PUBLISHABLE_KEY;
+const RequireAuth = ({ children, loadingText = "Loading..." }) => {
+  const { isLoaded, isSignedIn, openAuthModal } = useContext(AuthContext) || {};
+  const navigate = useNavigate();
+
+  useEffect(() => {
+    if (isLoaded && !isSignedIn) {
+      openAuthModal?.();
+      navigate("/", { replace: true });
+    }
+  }, [isLoaded, isSignedIn, openAuthModal, navigate]);
+
+  if (!isLoaded) {
+    return (
+      <div className="min-h-screen bg-black flex items-center justify-center text-[#1db954] font-semibold">
+        {loadingText}
+      </div>
+    );
+  }
+
+  if (!isSignedIn) {
+    return null;
+  }
+
+  return children;
+};
 
 const AdminRoute = ({ children }) => {
-  const { isLoaded, isSignedIn, user } = useUser();
-  const adminEmail = (import.meta.env.VITE_ADMIN_EMAIL || "").trim().toLowerCase();
-  const userEmail = (user?.primaryEmailAddress?.emailAddress || "").trim().toLowerCase();
+  const { isLoaded, isSignedIn, isAdmin, openAuthModal } = useContext(AuthContext) || {};
+  const navigate = useNavigate();
+
+  useEffect(() => {
+    if (isLoaded && !isSignedIn) {
+      openAuthModal?.();
+      navigate("/", { replace: true });
+    }
+  }, [isLoaded, isSignedIn, openAuthModal, navigate]);
 
   if (!isLoaded) {
     return (
@@ -38,10 +70,8 @@ const AdminRoute = ({ children }) => {
   }
 
   if (!isSignedIn) {
-    return <RedirectToSignIn />;
+    return null;
   }
-
-  const isAdmin = Boolean(adminEmail && userEmail === adminEmail);
 
   if (!isAdmin) {
     return <NotFound />;
@@ -53,8 +83,8 @@ const AdminRoute = ({ children }) => {
 function MainApp() {
   return (
     <MaintenanceGuard>
-      <BrowserRouter>
-        <PlayerProvider>
+      <PlayerProvider>
+        <BrowserRouter>
           <ErrorBoundary>
             <div className="relative min-h-screen bg-black text-white overflow-x-hidden">
               <ServerWakeBanner />
@@ -74,14 +104,9 @@ function MainApp() {
                   <Route
                     path="/profile"
                     element={
-                      <>
-                        <SignedIn>
-                          <Profile />
-                        </SignedIn>
-                        <SignedOut>
-                          <RedirectToSignIn />
-                        </SignedOut>
-                      </>
+                      <RequireAuth>
+                        <Profile />
+                      </RequireAuth>
                     }
                   />
                   <Route path="/search" element={<SearchResults />} />
@@ -99,31 +124,23 @@ function MainApp() {
               </main>
 
               <GlobalMiniPlayer />
+              <AuthModal />
             </div>
           </ErrorBoundary>
-        </PlayerProvider>
-      </BrowserRouter>
+        </BrowserRouter>
+      </PlayerProvider>
     </MaintenanceGuard>
   );
 }
 
 function App() {
-  if (!PUBLISHABLE_KEY) {
-    return (
-      <div className="min-h-screen bg-black text-white flex flex-col items-center justify-center p-6 text-center">
-        <h1 className="text-2xl font-bold text-red-500 mb-2">Configuration Error</h1>
-        <p className="text-gray-400 max-w-md">
-          Missing authentication key. Check that <code className="text-white">VITE_CLERK_PUBLISHABLE_KEY</code> is set in your environment variables.
-        </p>
-      </div>
-    );
-  }
-
   return (
     <ErrorBoundary>
-      <ClerkProvider publishableKey={PUBLISHABLE_KEY}>
-        <MainApp />
-      </ClerkProvider>
+      <GoogleOAuthProvider clientId={import.meta.env.VITE_GOOGLE_CLIENT_ID}>
+        <AuthProvider>
+          <MainApp />
+        </AuthProvider>
+      </GoogleOAuthProvider>
     </ErrorBoundary>
   );
 }

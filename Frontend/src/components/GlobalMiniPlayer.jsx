@@ -1,8 +1,8 @@
 import React, { useContext, useEffect, useState, useCallback } from "react";
 import { PlayerContext } from "../context/PlayerContext";
-import { Shuffle, SkipBack, Play, Pause, SkipForward, Volume2, VolumeX, Heart, PlusCircle } from "lucide-react"; 
-import { useUser } from "@clerk/clerk-react"; 
-import AddToPlaylistModal from './AddToPlaylistModal'; 
+import { AuthContext } from "../context/AuthContext";
+import { Shuffle, SkipBack, Play, Pause, SkipForward, Volume2, VolumeX, Heart, PlusCircle } from "lucide-react";
+import AddToPlaylistModal from './AddToPlaylistModal';
 import { API_URL } from "../config.js";
 
 const formatTime = (sec) => {
@@ -13,8 +13,8 @@ const formatTime = (sec) => {
 };
 
 const GlobalMiniPlayer = () => {
-  const { user } = useUser(); 
-  const [isLiked, setIsLiked] = useState(false); 
+  const { user, token, openAuthModal } = useContext(AuthContext) || {};
+  const [isLiked, setIsLiked] = useState(false);
   const [isLiking, setIsLiking] = useState(false);
   const [isPlaylistModalOpen, setIsPlaylistModalOpen] = useState(false);
   const [dragTime, setDragTime] = useState(null);
@@ -37,117 +37,115 @@ const GlobalMiniPlayer = () => {
 
   const currentSong = playlist?.[currentSongIndex];
   const currentAudioUrl = currentSong?.audio_url || currentSong?.path;
+  const email = user?.email || "";
+
+  const authHeaders = useCallback(() => ({
+    'Content-Type': 'application/json',
+    ...(token ? { Authorization: `Bearer ${token}` } : {})
+  }), [token]);
 
   useEffect(() => {
     setIsLiking(false);
-    
-    if (!currentAudioUrl || !user?.primaryEmailAddress?.emailAddress) {
+
+    if (!currentAudioUrl || !email || !token) {
       setIsLiked(false);
       return;
     }
 
-    let isMounted = true; 
+    let isMounted = true;
 
     const checkLikeStatus = async () => {
       try {
-        const email = user.primaryEmailAddress.emailAddress;
         const res = await fetch(`${API_URL}/api/likes/check`, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ email, audio_url: currentAudioUrl }) 
+          headers: authHeaders(),
+          body: JSON.stringify({ email, audio_url: currentAudioUrl })
         });
         const data = await res.json();
-        
-        if (isMounted) setIsLiked(data.isLiked); 
+
+        if (isMounted) setIsLiked(Boolean(data.isLiked));
       } catch (e) {
         console.error("Failed to check like status", e);
       }
     };
-    
+
     checkLikeStatus();
 
     return () => {
       isMounted = false;
     };
-  }, [currentAudioUrl, user]);
-
+  }, [currentAudioUrl, email, token, authHeaders]);
 
   useEffect(() => {
     if (playlist && playlist.length > 0) {
-      window.focus(); 
+      window.focus();
       if (document.activeElement && document.activeElement.tagName === "BUTTON") {
-         document.activeElement.blur();
+        document.activeElement.blur();
       }
     }
-  }, [playlist]); 
+  }, [playlist]);
 
   const handleLikeSong = useCallback(async (e) => {
-    e.stopPropagation(); 
+    e.stopPropagation();
 
-    if (!user) {
-      alert("Please sign in to save songs to your library!");
+    if (!email || !token) {
+      openAuthModal?.();
       return;
     }
-    
-    if (isLiking) return; 
-    setIsLiking(true); 
 
-    const email = user.primaryEmailAddress.emailAddress;
+    if (isLiking) return;
+    setIsLiking(true);
 
     try {
       if (isLiked) {
         const response = await fetch(`${API_URL}/api/likes`, {
           method: 'DELETE',
-          headers: { 'Content-Type': 'application/json' },
+          headers: authHeaders(),
           body: JSON.stringify({ email, audio_url: currentAudioUrl }),
         });
 
         if (response.ok) {
-           setIsLiked(false); 
-           window.dispatchEvent(new Event('vibecast_likes_updated'));
+          setIsLiked(false);
+          window.dispatchEvent(new Event('vibecast_likes_updated'));
         } else {
-           const errData = await response.json();
-           console.error("Unlike Failed:", errData);
-           alert("Server refused to Unlike. Check console!");
+          const errData = await response.json();
+          console.error("Unlike Failed:", errData);
         }
       } else {
-        // Updated POST request sending full song data for the backend upsert
         const response = await fetch(`${API_URL}/api/likes`, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ 
-            email, 
+          headers: authHeaders(),
+          body: JSON.stringify({
+            email,
             audio_url: currentAudioUrl,
             title: currentSong.title || currentSong.name,
             artist: currentSong.artist,
             cover_url: currentSong.cover_url || currentSong.image,
-            duration: currentSong.duration 
+            duration: currentSong.duration
           }),
         });
 
         if (response.ok) {
-           setIsLiked(true); 
-           window.dispatchEvent(new Event('vibecast_likes_updated'));
+          setIsLiked(true);
+          window.dispatchEvent(new Event('vibecast_likes_updated'));
         } else {
-           const errData = await response.json();
-           console.error("Like Failed:", errData);
-           alert(`Server refused to Like: ${errData.error || "Unknown Error"}`);
+          const errData = await response.json();
+          console.error("Like Failed:", errData);
         }
       }
     } catch (error) {
       console.error("Network error connecting to backend:", error);
-      alert("Cannot connect to server. Is Node running?");
     } finally {
-      setIsLiking(false); 
+      setIsLiking(false);
     }
-  }, [user, isLiked, isLiking, currentAudioUrl, currentSong]); // Added currentSong as a dependency
+  }, [email, token, openAuthModal, isLiked, isLiking, currentAudioUrl, currentSong, authHeaders]);
 
   if (!playlist?.length || !currentSong) return null;
 
   return (
     <>
       <div className="fixed bottom-[74px] md:bottom-0 left-0 right-0 h-24 bg-black/95 backdrop-blur-md z-50 flex items-center justify-between px-6 shadow-2xl border-t border-gray-800 transition-all duration-300">
-        
+
         <div className="hidden md:flex items-center w-[30%] min-w-[200px]">
           <img
             src={currentSong.cover_url || currentSong.image}
@@ -165,26 +163,28 @@ const GlobalMiniPlayer = () => {
         </div>
 
         <div className="flex flex-col items-center w-full md:w-[40%] max-w-lg">
-          
+
           <div className="md:hidden text-xs text-gray-300 mb-1 truncate w-64 text-center">
             <span className="text-white font-bold">{currentSong.title || currentSong.name}</span>
             {" - "}{currentSong.artist}
           </div>
 
           <div className="flex items-center gap-6 mb-2">
-            <button 
-              onClick={() => toggleShuffle()} 
+            <button
+              type="button"
+              onClick={() => toggleShuffle()}
               className={`transition ${isShuffle ? "text-[#1db954]" : "text-gray-400 hover:text-white"}`}
               title="Shuffle"
             >
               <Shuffle className="w-4 h-4" />
             </button>
 
-            <button onClick={() => prevSong()} className="text-gray-300 hover:text-white transition">
+            <button type="button" onClick={() => prevSong()} className="text-gray-300 hover:text-white transition">
               <SkipBack className="w-5 h-5" fill="currentColor" />
             </button>
 
             <button
+              type="button"
               onClick={() => playPause()}
               className="w-10 h-10 rounded-full bg-white text-black flex items-center justify-center hover:scale-105 transition-transform shadow-lg"
             >
@@ -195,12 +195,13 @@ const GlobalMiniPlayer = () => {
               )}
             </button>
 
-            <button onClick={() => nextSong()} className="text-gray-300 hover:text-white transition">
+            <button type="button" onClick={() => nextSong()} className="text-gray-300 hover:text-white transition">
               <SkipForward className="w-5 h-5" fill="currentColor" />
             </button>
 
-            <button 
-              onClick={handleLikeSong} 
+            <button
+              type="button"
+              onClick={handleLikeSong}
               disabled={isLiking}
               className={`transition transform hover:scale-110 ${isLiked ? "text-[#1db954]" : "text-gray-400 hover:text-white"} ${isLiking ? "opacity-50 cursor-not-allowed" : ""}`}
               title="Save to Library"
@@ -208,8 +209,15 @@ const GlobalMiniPlayer = () => {
               <Heart className="w-4 h-4" fill={isLiked ? "#1db954" : "none"} />
             </button>
 
-            <button 
-              onClick={() => setIsPlaylistModalOpen(true)}
+            <button
+              type="button"
+              onClick={() => {
+                if (!email || !token) {
+                  openAuthModal?.();
+                  return;
+                }
+                setIsPlaylistModalOpen(true);
+              }}
               className="text-gray-400 hover:text-white transition transform hover:scale-110"
               title="Add to Playlist"
             >
@@ -219,7 +227,7 @@ const GlobalMiniPlayer = () => {
 
           <div className="w-full flex items-center gap-2 text-xs text-gray-400 font-mono">
             <span className="w-10 text-right">{formatTime(dragTime !== null ? dragTime : progress)}</span>
-            
+
             <input
               type="range"
               min="0"
@@ -236,18 +244,18 @@ const GlobalMiniPlayer = () => {
               }}
               className="w-full h-1 bg-gray-600 rounded-lg appearance-none cursor-pointer accent-[#1db954] hover:h-1.5 transition-all"
             />
-            
+
             <span className="w-10">{formatTime(duration)}</span>
           </div>
         </div>
 
         <div className="hidden md:flex items-center justify-end w-[30%] pr-4 gap-2">
-          <button onClick={() => setVolume(volume === 0 ? 1 : 0)}>
-             {volume === 0 ? (
-               <VolumeX className="w-5 h-5 text-gray-400" />
-             ) : (
-               <Volume2 className="w-5 h-5 text-gray-400" />
-             )}
+          <button type="button" onClick={() => setVolume(volume === 0 ? 1 : 0)}>
+            {volume === 0 ? (
+              <VolumeX className="w-5 h-5 text-gray-400" />
+            ) : (
+              <Volume2 className="w-5 h-5 text-gray-400" />
+            )}
           </button>
           <input
             type="range"
@@ -261,10 +269,10 @@ const GlobalMiniPlayer = () => {
         </div>
       </div>
 
-      <AddToPlaylistModal 
-        isOpen={isPlaylistModalOpen} 
-        onClose={() => setIsPlaylistModalOpen(false)} 
-        track={currentSong} 
+      <AddToPlaylistModal
+        isOpen={isPlaylistModalOpen}
+        onClose={() => setIsPlaylistModalOpen(false)}
+        track={currentSong}
       />
     </>
   );

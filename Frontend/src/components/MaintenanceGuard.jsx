@@ -1,10 +1,10 @@
-import React, { useState, useEffect } from 'react';
-import { useUser } from "@clerk/clerk-react";
+import React, { useState, useEffect, useContext } from 'react';
 import MaintenanceScreen from "./MaintenanceScreen";
+import { AuthContext } from "../context/AuthContext";
 import { API_URL } from "../config.js";
 
 const MaintenanceGuard = ({ children }) => {
-  const { user, isLoaded } = useUser();
+  const { isLoaded, isAdmin } = useContext(AuthContext) || {};
   const [isMaintenanceMode, setIsMaintenanceMode] = useState(false);
   const [checkingMaintenance, setCheckingMaintenance] = useState(true);
 
@@ -50,10 +50,6 @@ const MaintenanceGuard = ({ children }) => {
       </div>
     );
   }
-
-  const adminEmail = (import.meta.env.VITE_ADMIN_EMAIL || '').trim().toLowerCase();
-  const userEmail = (user?.primaryEmailAddress?.emailAddress || '').trim().toLowerCase();
-  const isAdmin = Boolean(adminEmail && userEmail === adminEmail);
 
   if (isMaintenanceMode && !isAdmin) {
     return <MaintenanceScreen />;
